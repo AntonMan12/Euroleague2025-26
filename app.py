@@ -127,4 +127,4 @@ else:
         col = cols[i % 2]
         
         # Pull player specific row to extract position letter
-        p_row = current_roster[current_roster['Player'] == name].
+        p_row = current_roster[current_roster['Player'] == name].iloc[0]
