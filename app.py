@@ -1,4 +1,4 @@
-import streamlit as st
+                import streamlit as st
 import pandas as pd
 import random
 
@@ -20,6 +20,7 @@ def load_data():
         clow = col.lower()
         if clow == 'team': df.rename(columns={col: 'Team'}, inplace=True)
         elif clow == 'player': df.rename(columns={col: 'Player'}, inplace=True)
+        elif clow in ['position', 'pos']: df.rename(columns={col: 'Position'}, inplace=True)
         elif clow == 'pts': df.rename(columns={col: 'PTS'}, inplace=True)
         elif clow == 'trb': df.rename(columns={col: 'TRB'}, inplace=True)
         elif clow == 'ast': df.rename(columns={col: 'AST'}, inplace=True)
@@ -80,7 +81,8 @@ elif st.session_state.round_num > 5:
     st.markdown("---")
     
     for p in st.session_state.selected_players_info:
-        st.markdown(f"**• {p['name']}** ({p['team']})")
+        pos_display = f" [{p['pos']}]" if p['pos'] else ""
+        st.markdown(f"**• {p['name']}**{pos_display} ({p['team']})")
         st.caption(f"➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB | {p['ast']:.1f} AST | {p['stl']:.1f} STL | {p['blk']:.1f} BLK")
         st.divider()
         
@@ -107,7 +109,8 @@ else:
     if st.session_state.selected_players_info:
         with st.expander("🏀 View Your Squad So Far", expanded=True):
             for p in st.session_state.selected_players_info:
-                st.write(f"• **{p['name']}** ({p['team']}) ➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB")
+                pos_log = f" ({p['pos']})" if p['pos'] else ""
+                st.write(f"• **{p['name']}**{pos_log} [{p['team']}] ➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB")
     
     st.markdown("---")
     st.subheader(f"🎲 Random Team: :blue[{st.session_state.current_team}]")
@@ -122,19 +125,6 @@ else:
     cols = st.columns(2)
     for i, name in enumerate(players):
         col = cols[i % 2]
-        if col.button(name, key=f"btn_{name}_{st.session_state.round_num}", use_container_width=True):
-            row = current_roster[current_roster['Player'] == name].iloc[0]
-            pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
-            
-            # Save selections and advance game state
-            st.session_state.grand_total_stats += (pts + trb + ast + stl + blk)
-            st.session_state.selected_players_info.append({
-                'name': name, 'team': st.session_state.current_team,
-                'pts': pts, 'trb': trb, 'ast': ast, 'stl': stl, 'blk': blk
-            })
-            
-            st.session_state.round_num += 1
-            if st.session_state.available_teams and st.session_state.round_num <= 5:
-                st.session_state.current_team = random.choice(st.session_state.available_teams)
-                st.session_state.available_teams.remove(st.session_state.current_team)
-            st.rerun()
+        
+        # Pull player specific row to extract position letter
+        p_row = current_roster[current_roster['Player'] == name].
