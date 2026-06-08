@@ -17,18 +17,22 @@ def load_data():
         st.error(f"Could not read Google Sheet. Make sure it is public! Error: {e}")
         return pd.DataFrame()
     
-    # Clean up column headers
+    # Advanced column scanner to clean up headers and map them properly
     df.columns = df.columns.str.strip()
+    rename_dict = {}
     for col in df.columns:
         clow = col.lower()
-        if clow == 'team': df.rename(columns={col: 'Team'}, inplace=True)
-        elif clow == 'player': df.rename(columns={col: 'Player'}, inplace=True)
-        elif clow in ['position', 'pos']: df.rename(columns={col: 'Position'}, inplace=True)
-        elif clow == 'pts': df.rename(columns={col: 'PTS'}, inplace=True)
-        elif clow == 'trb': df.rename(columns={col: 'TRB'}, inplace=True)
-        elif clow == 'ast': df.rename(columns={col: 'AST'}, inplace=True)
-        elif clow == 'stl': df.rename(columns={col: 'STL'}, inplace=True)
-        elif clow == 'blk': df.rename(columns={col: 'BLK'}, inplace=True)
+        if clow == 'team': rename_dict[col] = 'Team'
+        elif clow == 'player': rename_dict[col] = 'Player'
+        elif clow in ['position', 'pos', 'pos.', 'role', 'p'] or 'position' in clow: 
+            rename_dict[col] = 'Position'
+        elif clow == 'pts': rename_dict[col] = 'PTS'
+        elif clow == 'trb': rename_dict[col] = 'TRB'
+        elif clow == 'ast': rename_dict[col] = 'AST'
+        elif clow == 'stl': rename_dict[col] = 'STL'
+        elif clow == 'blk': rename_dict[col] = 'BLK'
+    
+    df.rename(columns=rename_dict, inplace=True)
     return df
 
 df = load_data()
@@ -36,11 +40,13 @@ df = load_data()
 if df.empty:
     st.warning("The spreadsheet appears to be empty or could not be loaded.")
 else:
-    # Diagnostic Check
-    required = ['Team', 'Player', 'PTS', 'TRB', 'AST', 'STL', 'BLK']
+    # Diagnostic Check (Position added to required list to prevent silent failure)
+    required = ['Team', 'Player', 'Position', 'PTS', 'TRB', 'AST', 'STL', 'BLK']
     missing = [r for r in required if r not in df.columns]
     if missing:
         st.error(f"🕵️‍♂️ Missing columns in spreadsheet: {missing}")
+        st.info(f"Current columns found in your sheet: {list(df.columns)}")
+        st.write("Please check your Google Sheet column headers match exactly!")
         st.stop()
 
     # 2. Gather all individual teams, splitting any shared '/' paths
@@ -63,8 +69,7 @@ else:
         elif score >= 45.0: return "D", "📉 REBUILDING PHASE. Your squad has too many bench players."
         else: return "E", "🪑 GARBAGE TIME SQUAD. You drafted deep rotation players."
 
-    # 3. Stream
-# 3. Streamlit Session State Initialization
+    # 3. Streamlit Session State Initialization
     if 'game_started' not in st.session_state:
         st.session_state.game_started = False
         st.session_state.round_num = 1
