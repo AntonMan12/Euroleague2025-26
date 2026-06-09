@@ -211,7 +211,7 @@ if not st.session_state.game_started:
     
     st.markdown("### 📅 Step 1: Configure Draft Pool")
     chosen_seasons = st.multiselect(
-        "Select seasons to include in the random pool:",
+        "Select as many seasons as you like to include in the random pool:",
         options=list(SEASONS.keys()),
         default=[],  
         placeholder="Choose one or multiple seasons..."
