@@ -236,7 +236,7 @@ elif st.session_state.round_num > 5:
 # ─────────────────────────────────────────────
 else:
     st.title(f"Round {st.session_state.round_num} / 5")
-    st.caption(f"📅 Season: **{st.session_state.current_season}** | 🏀 Team: **{st.session_state.current_team}**")
+
 
     g_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'G')
     f_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'F')
@@ -255,7 +255,7 @@ else:
                 st.write(f"• **{p['name']}**{pos_log} [{p['team']}] *{p['season']}* ➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB")
 
     st.markdown("---")
-    st.subheader(f"🎲 :blue[{st.session_state.current_team}]")
+    st.subheader(f"🎲 :blue[{st.session_state.current_team}] — *{st.session_state.current_season}*")
     st.write("Tap an available player's name to draft them:")
 
     current_df     = st.session_state.current_df
