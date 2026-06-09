@@ -264,7 +264,7 @@ elif st.session_state.round_num > 5:
         st.divider()
 
     grade, message = get_squad_grade(st.session_state.grand_total_stats)
-    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
+    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total SCORE Accumulated: {st.session_state.grand_total_stats:.1f})")
     st.info(f"📢 STATUS: {message}")
 
     if st.button("🔄 Play Again", use_container_width=True):
