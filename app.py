@@ -88,6 +88,7 @@ def load_season(gid: str):
         elif clow == 'ast':         rename_dict[col] = 'AST'
         elif clow == 'stl':         rename_dict[col] = 'STL'
         elif clow == 'blk':         rename_dict[col] = 'BLK'
+        elif clow == 'pir':         rename_dict[col] = 'PIR'  # Map the PIR column
     df.rename(columns=rename_dict, inplace=True)
     return df
 
@@ -101,10 +102,10 @@ def plays_for_team(player_team_str, target_team):
     return target_team.lower() in teams
 
 def get_squad_grade(score):
-    if   score >= 105.0: return "A", "🔥 ELITE / ALL-EUROLEAGUE SQUAD! You drafted absolute superstars."
-    elif score >=  85.0: return "B", "💪 PLAYOFF CONTENDER! A highly competitive lineup of solid starters."
-    elif score >=  65.0: return "C", "⚖️ MID-TABLE TEAM. An average draft with a mix of stars and role players."
-    elif score >=  45.0: return "D", "📉 REBUILDING PHASE. Your squad has too many bench players."
+    if   score >= 90.0:  return "A", "🔥 ELITE / ALL-EUROLEAGUE SQUAD! You drafted high-PIR superstars."
+    elif score >= 75.0:  return "B", "💪 PLAYOFF CONTENDER! A highly competitive lineup of efficient starters."
+    elif score >= 55.0:  return "C", "⚖️ MID-TABLE TEAM. An average draft with a mix of production and role players."
+    elif score >= 35.0:  return "D", "📉 REBUILDING PHASE. Your squad has too many low-efficiency players."
     else:                return "E", "🪑 GARBAGE TIME SQUAD. You drafted deep rotation players."
 
 def get_unique_teams(df):
@@ -166,7 +167,7 @@ def pick_random_season_and_team(pool_seasons, exclude_seasons=None):
         df  = load_season(gid)
         if df.empty:
             continue
-        required = ['Team', 'Player', 'Position', 'PTS', 'TRB', 'AST', 'STL', 'BLK']
+        required = ['Team', 'Player', 'Position', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'PIR']
         if any(r not in df.columns for r in required):
             continue
         teams = get_unique_teams(df)
@@ -191,7 +192,6 @@ if 'game_started' not in st.session_state:
     st.session_state.current_df             = None
     st.session_state.current_team           = None
     
-    # Target counts for tracking requirements dynamically
     st.session_state.max_g                  = 2
     st.session_state.max_f                  = 2
     st.session_state.max_c                  = 1
@@ -211,7 +211,7 @@ if not st.session_state.game_started:
     
     st.markdown("### 📅 Step 1: Configure Draft Pool")
     chosen_seasons = st.multiselect(
-        "Select as many seasons as you like to include in the random pool:",
+        "Select seasons to include in the random pool:",
         options=list(SEASONS.keys()),
         default=[],  
         placeholder="Choose one or multiple seasons..."
@@ -228,7 +228,6 @@ if not st.session_state.game_started:
         if not chosen_seasons:
             st.error("⚠️ You must choose at least one season to populate your draft pool!")
         else:
-            # Inject dynamic roster configurations into session state
             limits = ROSTER_OPTIONS[chosen_requirement]
             st.session_state.max_g = limits["G"]
             st.session_state.max_f = limits["F"]
@@ -257,6 +256,7 @@ elif st.session_state.round_num > 5:
     st.title("🏆 Final Squad Report")
     st.markdown("---")
 
+    # Display traditional box score metrics here, not the PIR
     for p in st.session_state.selected_players_info:
         pos_display = f" [{p['pos']}]" if p['pos'] else ""
         st.markdown(f"**• {p['name']}**{pos_display} ({p['team']}) — *{p['season']}*")
@@ -264,7 +264,7 @@ elif st.session_state.round_num > 5:
         st.divider()
 
     grade, message = get_squad_grade(st.session_state.grand_total_stats)
-    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total Stats: {st.session_state.grand_total_stats:.1f})")
+    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
     st.info(f"📢 STATUS: {message}")
 
     if st.button("🔄 Play Again", use_container_width=True):
@@ -285,9 +285,9 @@ else:
 
     st.markdown("### 📋 Your Roster Requirements")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Guards",   f"{g_count} / {st.session_state.max_g}")
-    c2.metric("Forwards", f"{f_count} / {st.session_state.max_f}")
-    c3.metric("Centers",  f"{c_count} / {st.session_state.max_c}")
+    c1.metric(" Guards",   f"{g_count} / {st.session_state.max_g}")
+    c2.metric(" Forwards", f"{f_count} / {st.session_state.max_f}")
+    c3.metric(" Centers",  f"{c_count} / {st.session_state.max_c}")
 
     if st.session_state.selected_players_info:
         with st.expander("🏀 View Current Roster Details", expanded=False):
@@ -325,7 +325,6 @@ else:
         has_valid_move = False
         player_data = []
 
-        # Enforce the dynamic roster limits loaded during customization setup 
         roster_slots = {
             "G": (g_count, st.session_state.max_g), 
             "F": (f_count, st.session_state.max_f), 
@@ -394,8 +393,14 @@ else:
                                     ):
                                         row = pdata['row']
                                         pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
+                                        
+                                        # Safely extract PIR value from dataset row
+                                        pir = float(row['PIR']) if pd.notna(row['PIR']) else 0.0
 
-                                        st.session_state.grand_total_stats += (pts + trb + ast + stl + blk)
+                                        # Add PIR towards grading total score evaluation 
+                                        st.session_state.grand_total_stats += pir
+                                        
+                                        # Keep traditional stats stored to showcase on game-over report screen
                                         st.session_state.selected_players_info.append({
                                             'name':      pdata['name'],
                                             'team':      st.session_state.current_team,
