@@ -74,7 +74,7 @@ def load_season(gid: str):
         clow = col.lower()
         if clow == 'team':                                      rename_dict[col] = 'Team'
         elif clow == 'player':                                  rename_dict[col] = 'Player'
-        elif clow in ['position','pos','pos.','role','p'] or 'position' in clow:
+        elif clow in ['position','pos','pos.','role','p','player-position'] or 'position' in clow:
                                                                 rename_dict[col] = 'Position'
         elif clow == 'pts':                                     rename_dict[col] = 'PTS'
         elif clow == 'trb':                                     rename_dict[col] = 'TRB'
@@ -107,6 +107,44 @@ def get_unique_teams(df):
         for t in team_string.split('/'):
             individual_teams.add(t.strip())
     return list(individual_teams)
+
+
+def parse_position(raw_pos: str) -> list[str]:
+    """
+    Handles both old and new position formats and returns a list of
+    normalised position codes (G, F, C) that the player can fill.
+
+    Old format: "G", "F/C", "PG/SG"
+    New format: "Scottie Wilbekin - G", "Nikola Mirotic - F/C", "Shane Larkin - PG/SG"
+
+    Examples:
+        "G"                      → ["G"]
+        "PG/SG"                  → ["G"]
+        "F/C"                    → ["F", "C"]
+        "Mirotic - F/C"          → ["F", "C"]
+        "Shane Larkin - PG/SG"   → ["G"]
+    """
+    if not raw_pos or raw_pos.strip().upper() in ("", "NAN", "NONE"):
+        return []
+
+    # Strip everything up to and including " - " if present (new format)
+    if " - " in raw_pos:
+        raw_pos = raw_pos.split(" - ", 1)[1]
+
+    # Now raw_pos is something like "G", "F/C", "PG/SG", "SF/PF"
+    parts = [p.strip().upper() for p in raw_pos.split("/")]
+
+    clean = set()
+    for p in parts:
+        if "G" in p:
+            clean.add("G")
+        if "F" in p:
+            clean.add("F")
+        if p == "C" or p.startswith("C"):
+            clean.add("C")
+
+    # Return in a stable order
+    return [pos for pos in ["G", "F", "C"] if pos in clean]
 
 
 # ─────────────────────────────────────────────
@@ -238,32 +276,47 @@ else:
         has_valid_move      = False
         player_buttons_data = []
 
+        roster_slots = {"G": (g_count, 2), "F": (f_count, 2), "C": (c_count, 1)}
+
         for name in players:
-            p_row     = current_roster[current_roster['Player'] == name].iloc[0]
-            pos_upper = (
-                str(p_row['Position']).strip().upper()
+            p_row   = current_roster[current_roster['Player'] == name].iloc[0]
+            raw_pos = (
+                str(p_row['Position']).strip()
                 if 'Position' in current_roster.columns and pd.notna(p_row['Position'])
                 else ""
             )
-            pos_clean = ""
-            if   "G" in pos_upper: pos_clean = "G"
-            elif "F" in pos_upper: pos_clean = "F"
-            elif "C" in pos_upper: pos_clean = "C"
+            eligible_positions = parse_position(raw_pos)
 
-            is_disabled = False
-            suffix      = ""
-            if   pos_clean == "G" and g_count >= 2: is_disabled = True; suffix = " 🚫 [G Full]"
-            elif pos_clean == "F" and f_count >= 2: is_disabled = True; suffix = " 🚫 [F Full]"
-            elif pos_clean == "C" and c_count >= 1: is_disabled = True; suffix = " 🚫 [C Full]"
+            if not eligible_positions:
+                # Unknown position — show a single disabled button
+                player_buttons_data.append({
+                    'name': name, 'label': f"{name} (?) 🚫 [Unknown pos]",
+                    'disabled': True, 'row': p_row, 'pos_clean': "", 'pos_upper': "?"
+                })
+                continue
 
-            if not is_disabled:
-                has_valid_move = True
+            # One button per position the player CAN fill
+            for pos_clean in eligible_positions:
+                filled, limit = roster_slots[pos_clean]
+                slot_full    = filled >= limit
+                slot_label   = {"G": "G Full", "F": "F Full", "C": "C Full"}[pos_clean]
 
-            button_label = f"{name} ({pos_upper}){suffix}" if pos_upper else f"{name}{suffix}"
-            player_buttons_data.append({
-                'name': name, 'label': button_label, 'disabled': is_disabled,
-                'row': p_row, 'pos_clean': pos_clean, 'pos_upper': pos_upper
-            })
+                # Display the original multi-position tag (e.g. "F/C") on every button
+                pos_display = "/".join(eligible_positions) if len(eligible_positions) > 1 else pos_clean
+
+                if slot_full:
+                    suffix       = f" 🚫 [{slot_label}]"
+                    is_disabled  = True
+                else:
+                    suffix       = f" → draft as {pos_clean}"
+                    is_disabled  = False
+                    has_valid_move = True
+
+                button_label = f"{name} ({pos_display}){suffix}"
+                player_buttons_data.append({
+                    'name': name, 'label': button_label, 'disabled': is_disabled,
+                    'row': p_row, 'pos_clean': pos_clean, 'pos_upper': pos_display
+                })
 
         if not has_valid_move:
             st.error("⚠️ **Roster Constraint Lockout!** All players on this team fill positions you've already maxed out.")
@@ -278,7 +331,7 @@ else:
                 col = cols[i % 2]
                 if col.button(
                     pdata['label'],
-                    key=f"btn_{pdata['name']}_{st.session_state.round_num}",
+                    key=f"btn_{pdata['name']}_{pdata['pos_clean']}_{st.session_state.round_num}",
                     use_container_width=True,
                     disabled=pdata['disabled']
                 ):
