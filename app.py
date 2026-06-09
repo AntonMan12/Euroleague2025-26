@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import random
-import requests
-import re
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
@@ -11,50 +9,38 @@ SPREADSHEET_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
 # ─────────────────────────────────────────────
 # 1. Fetch all sheet names + gids from the public spreadsheet
 # ─────────────────────────────────────────────
-@st.cache_data(ttl=3600)
+# All 25 EuroLeague seasons — hardcoded for reliability
+SEASONS = {
+    "2025-26": "543714600",
+    "2024-25": "1549437101",
+    "2023-24": "1831882140",
+    "2022-23": "1520752226",
+    "2021-22": "2089144730",
+    "2020-21": "1816215049",
+    "2019-20": "553933453",
+    "2018-19": "1267099967",
+    "2017-18": "1197135956",
+    "2016-17": "179740526",
+    "2015-16": "508885604",
+    "2014-15": "1039861337",
+    "2013-14": "14626217",
+    "2012-13": "868645856",
+    "2011-12": "1294164506",
+    "2010-11": "984593909",
+    "2009-10": "1189996356",
+    "2008-09": "117181707",
+    "2007-08": "1682008449",
+    "2006-07": "432863192",
+    "2005-06": "493050551",
+    "2004-05": "718961987",
+    "2003-04": "676363461",
+    "2002-03": "691080699",
+    "2001-02": "1203521641",
+    "2000-01": "1987314852",
+}
+
 def get_all_seasons():
-    """
-    Returns a dict of { season_name: gid } for every sheet tab.
-    Uses the Sheets API v4 metadata endpoint, which works for public
-    spreadsheets without requiring a login or API key.
-    """
-    # ── Sheets API v4 (no key needed for public sheets) ───────────────────
-    try:
-        url = (
-            f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}"
-            f"?fields=sheets.properties"
-        )
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            sheets  = r.json().get("sheets", [])
-            seasons = {
-                s["properties"]["title"]: str(s["properties"]["sheetId"])
-                for s in sheets
-            }
-            if seasons:
-                return seasons
-    except Exception:
-        pass
-
-    # ── Fallback: probe known + sequential gids via CSV export ────────────
-    # We don't know tab names this way, so we label them by gid.
-    try:
-        probe_gids = [380503435, 0] + list(range(1, 30))
-        seasons    = {}
-        for gid in probe_gids:
-            test_url = (
-                f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/"
-                f"export?format=csv&gid={gid}"
-            )
-            resp = requests.head(test_url, timeout=6, allow_redirects=True)
-            if resp.status_code == 200:
-                seasons[f"Season (gid={gid})"] = str(gid)
-        if seasons:
-            return seasons
-    except Exception:
-        pass
-
-    return {}
+    return SEASONS
 
 
 # ─────────────────────────────────────────────
