@@ -126,12 +126,21 @@ def parse_position(raw_pos: str) -> list[str]:
 
     clean = set()
     for p in parts:
-        if "G" in p:
+        # Normalize sub-positions to base G/F/C
+        # Guard variants: G, PG, SG
+        if p in ("G", "PG", "SG"):
             clean.add("G")
-        if "F" in p:
+        # Forward variants: F, SF, PF
+        elif p in ("F", "SF", "PF"):
             clean.add("F")
-        if p == "C" or p.startswith("C"):
+        # Center variants: C, C1, CT, CTR, CENTER
+        elif p == "C" or p.startswith("C"):
             clean.add("C")
+        # Catch-all for anything containing G/F/C if none of the above matched
+        else:
+            if "G" in p: clean.add("G")
+            if "F" in p: clean.add("F")
+            if "C" in p: clean.add("C")
 
     # Return in a stable order
     return [pos for pos in ["G", "F", "C"] if pos in clean]
