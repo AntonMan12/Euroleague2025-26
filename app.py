@@ -60,17 +60,30 @@ def load_season(gid: str):
 
     df.columns = df.columns.str.strip()
     rename_dict = {}
+
+    # For position: prefer exact 'Positions' column, then fall back to others.
+    # This avoids mapping two columns to the same name if both exist.
+    position_priority = ['positions', 'position', 'pos', 'pos.', 'role', 'player-position']
+    chosen_pos_col = None
+    for priority in position_priority:
+        match = next((col for col in df.columns if col.lower() == priority), None)
+        if match:
+            chosen_pos_col = match
+            break
+    # Final fallback: any column containing 'position'
+    if not chosen_pos_col:
+        chosen_pos_col = next((col for col in df.columns if 'position' in col.lower()), None)
+
     for col in df.columns:
         clow = col.lower()
-        if clow == 'team':                                      rename_dict[col] = 'Team'
-        elif clow == 'player':                                  rename_dict[col] = 'Player'
-        elif clow in ['position','pos','pos.','role','p','player-position'] or 'position' in clow:
-                                                                rename_dict[col] = 'Position'
-        elif clow == 'pts':                                     rename_dict[col] = 'PTS'
-        elif clow == 'trb':                                     rename_dict[col] = 'TRB'
-        elif clow == 'ast':                                     rename_dict[col] = 'AST'
-        elif clow == 'stl':                                     rename_dict[col] = 'STL'
-        elif clow == 'blk':                                     rename_dict[col] = 'BLK'
+        if clow == 'team':          rename_dict[col] = 'Team'
+        elif clow == 'player':      rename_dict[col] = 'Player'
+        elif col == chosen_pos_col: rename_dict[col] = 'Position'
+        elif clow == 'pts':         rename_dict[col] = 'PTS'
+        elif clow == 'trb':         rename_dict[col] = 'TRB'
+        elif clow == 'ast':         rename_dict[col] = 'AST'
+        elif clow == 'stl':         rename_dict[col] = 'STL'
+        elif clow == 'blk':         rename_dict[col] = 'BLK'
     df.rename(columns=rename_dict, inplace=True)
     return df
 
@@ -106,13 +119,6 @@ def parse_position(raw_pos: str) -> list[str]:
 
     Old format: "G", "F/C", "PG/SG"
     New format: "Scottie Wilbekin - G", "Nikola Mirotic - F/C", "Shane Larkin - PG/SG"
-
-    Examples:
-        "G"                      → ["G"]
-        "PG/SG"                  → ["G"]
-        "F/C"                    → ["F", "C"]
-        "Mirotic - F/C"          → ["F", "C"]
-        "Shane Larkin - PG/SG"   → ["G"]
     """
     if not raw_pos or raw_pos.strip().upper() in ("", "NAN", "NONE"):
         return []
@@ -127,22 +133,17 @@ def parse_position(raw_pos: str) -> list[str]:
     clean = set()
     for p in parts:
         # Normalize sub-positions to base G/F/C
-        # Guard variants: G, PG, SG
         if p in ("G", "PG", "SG"):
             clean.add("G")
-        # Forward variants: F, SF, PF
         elif p in ("F", "SF", "PF"):
             clean.add("F")
-        # Center variants: C, C1, CT, CTR, CENTER
         elif p == "C" or p.startswith("C"):
             clean.add("C")
-        # Catch-all for anything containing G/F/C if none of the above matched
         else:
             if "G" in p: clean.add("G")
             if "F" in p: clean.add("F")
             if "C" in p: clean.add("C")
 
-    # Return in a stable order
     return [pos for pos in ["G", "F", "C"] if pos in clean]
 
 
@@ -237,7 +238,6 @@ elif st.session_state.round_num > 5:
 else:
     st.title(f"Round {st.session_state.round_num} / 5")
 
-
     g_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'G')
     f_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'F')
     c_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'C')
@@ -280,13 +280,14 @@ else:
             draw_next_round()
             st.rerun()
     else:
-        has_valid_move      = False
-        player_buttons_data = []
+        has_valid_move = False
+        player_data = []
 
         roster_slots = {"G": (g_count, 2), "F": (f_count, 2), "C": (c_count, 1)}
 
+        # 1. Gather unique player profiles and their eligibility configurations
         for name in players:
-            p_row   = current_roster[current_roster['Player'] == name].iloc[0]
+            p_row = current_roster[current_roster['Player'] == name].iloc[0]
             raw_pos = (
                 str(p_row['Position']).strip()
                 if 'Position' in current_roster.columns and pd.notna(p_row['Position'])
@@ -295,30 +296,29 @@ else:
             eligible_positions = parse_position(raw_pos)
 
             if not eligible_positions:
-                player_buttons_data.append({
-                    'name': name, 'label': f"{name} (?) 🚫 [Unknown pos]",
-                    'disabled': True, 'row': p_row, 'pos_clean': "", 'pos_upper': "?"
+                player_data.append({
+                    'name': name, 'row': p_row, 'positions': [], 'pos_upper': "?"
                 })
                 continue
 
+            pos_info = []
             for pos_clean in eligible_positions:
                 filled, limit = roster_slots[pos_clean]
-                slot_full     = filled >= limit
-                slot_label    = {"G": "G Full", "F": "F Full", "C": "C Full"}[pos_clean]
-                pos_display   = "/".join(eligible_positions) if len(eligible_positions) > 1 else pos_clean
-
-                if slot_full:
-                    suffix, is_disabled = f" 🚫 [{slot_label}]", True
-                else:
-                    suffix, is_disabled = f" → draft as {pos_clean}", False
+                slot_full = filled >= limit
+                if not slot_full:
                     has_valid_move = True
-
-                player_buttons_data.append({
-                    'name': name, 'label': f"{name} ({pos_display}){suffix}",
-                    'disabled': is_disabled, 'row': p_row,
-                    'pos_clean': pos_clean, 'pos_upper': pos_display
+                
+                pos_info.append({
+                    'pos_clean': pos_clean,
+                    'disabled': slot_full
                 })
 
+            pos_display = "/".join(eligible_positions) if len(eligible_positions) > 1 else eligible_positions[0]
+            player_data.append({
+                'name': name, 'row': p_row, 'positions': pos_info, 'pos_upper': pos_display
+            })
+
+        # 2. Render UI Layout
         if not has_valid_move:
             st.error("⚠️ **Roster Constraint Lockout!** All players fill positions you've already maxed out.")
             if st.button("🔄 Draw a Different Team", use_container_width=True, type="primary"):
@@ -326,28 +326,45 @@ else:
                 st.rerun()
         else:
             cols = st.columns(2)
-            for i, pdata in enumerate(player_buttons_data):
+            for i, pdata in enumerate(player_data):
                 col = cols[i % 2]
-                if col.button(
-                    pdata['label'],
-                    key=f"btn_{pdata['name']}_{pdata['pos_clean']}_{st.session_state.round_num}",
-                    use_container_width=True,
-                    disabled=pdata['disabled']
-                ):
-                    row = pdata['row']
-                    pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
+                with col:
+                    # Renders a neat box framing the player's info card
+                    with st.container(border=True):
+                        if not pdata['positions']:
+                            st.write(f"🚫 **{pdata['name']}** [Unknown pos]")
+                        else:
+                            # Allocates 75% space for the name string, splits the rest for buttons
+                            num_pos = len(pdata['positions'])
+                            subcols = st.columns([3] + [1] * num_pos)
+                            
+                            # Vertically offsets name to balance perfectly with default button layout heights
+                            with subcols[0]:
+                                st.markdown(f"<div style='margin-top: 8px; font-weight: bold;'>{pdata['name']}</div>", unsafe_allow_html=True)
+                            
+                            # Builds position option actions horizontally next to name string
+                            for j, pos_dict in enumerate(pdata['positions']):
+                                with subcols[j+1]:
+                                    if st.button(
+                                        pos_dict['pos_clean'],
+                                        key=f"btn_{pdata['name']}_{pos_dict['pos_clean']}_{st.session_state.round_num}",
+                                        use_container_width=True,
+                                        disabled=pos_dict['disabled']
+                                    ):
+                                        row = pdata['row']
+                                        pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
 
-                    st.session_state.grand_total_stats += (pts + trb + ast + stl + blk)
-                    st.session_state.selected_players_info.append({
-                        'name':      pdata['name'],
-                        'team':      st.session_state.current_team,
-                        'season':    st.session_state.current_season,
-                        'pos':       pdata['pos_upper'],
-                        'pos_clean': pdata['pos_clean'],
-                        'pts': pts, 'trb': trb, 'ast': ast, 'stl': stl, 'blk': blk
-                    })
+                                        st.session_state.grand_total_stats += (pts + trb + ast + stl + blk)
+                                        st.session_state.selected_players_info.append({
+                                            'name':      pdata['name'],
+                                            'team':      st.session_state.current_team,
+                                            'season':    st.session_state.current_season,
+                                            'pos':       pdata['pos_upper'],
+                                            'pos_clean': pos_dict['pos_clean'],
+                                            'pts': pts, 'trb': trb, 'ast': ast, 'stl': stl, 'blk': blk
+                                        })
 
-                    st.session_state.round_num += 1
-                    if st.session_state.round_num <= 5:
-                        draw_next_round()
-                    st.rerun()
+                                        st.session_state.round_num += 1
+                                        if st.session_state.round_num <= 5:
+                                            draw_next_round()
+                                        st.rerun()
