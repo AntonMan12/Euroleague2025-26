@@ -138,59 +138,59 @@ def parse_position(raw_pos: str) -> list[str]:
 
 
 # ─────────────────────────────────────────────
-# 4. Bootstrap: pick a random season ONCE per session
+# 4. Helper: pick a fresh random season + team
 # ─────────────────────────────────────────────
-if 'season_name' not in st.session_state:
-    all_seasons = get_all_seasons()
+def pick_random_season_and_team(exclude_seasons=None):
+    """
+    Picks a random season (not in exclude_seasons) and a random team from it.
+    Returns (season_name, df, team_name) or raises if nothing loads.
+    """
+    exclude_seasons = exclude_seasons or set()
+    available = [s for s in SEASONS if s not in exclude_seasons]
+    if not available:
+        available = list(SEASONS.keys())  # reset if all used
 
-    if not all_seasons:
-        st.error(
-            "❌ Could not retrieve the list of seasons from the Google Sheet. "
-            "Make sure the spreadsheet is set to **Anyone with the link → Viewer**."
-        )
-        st.stop()
+    random.shuffle(available)
+    for season_name in available:
+        gid = SEASONS[season_name]
+        df  = load_season(gid)
+        if df.empty:
+            continue
+        required = ['Team', 'Player', 'Position', 'PTS', 'TRB', 'AST', 'STL', 'BLK']
+        if any(r not in df.columns for r in required):
+            continue
+        teams = get_unique_teams(df)
+        if not teams:
+            continue
+        team = random.choice(teams)
+        return season_name, df, team
+    return None, None, None
 
-    chosen_name = random.choice(list(all_seasons.keys()))
-    chosen_gid  = all_seasons[chosen_name]
 
-    df = load_season(chosen_gid)
-    required = ['Team', 'Player', 'Position', 'PTS', 'TRB', 'AST', 'STL', 'BLK']
-    missing  = [r for r in required if r not in df.columns]
-    if missing or df.empty:
-        st.error(f"Season sheet '{chosen_name}' is missing columns: {missing}. Found: {list(df.columns)}")
-        st.stop()
-
-    unique_teams = get_unique_teams(df)
-
-    st.session_state.season_name   = chosen_name
-    st.session_state.df            = df
-    st.session_state.unique_teams  = unique_teams
-    st.session_state.game_started  = False
-    st.session_state.round_num     = 1
+# ─────────────────────────────────────────────
+# 5. Bootstrap: initialise session state
+# ─────────────────────────────────────────────
+if 'game_started' not in st.session_state:
+    season_name, df, team = pick_random_season_and_team()
+    st.session_state.game_started           = False
+    st.session_state.round_num              = 1
     st.session_state.grand_total_stats      = 0.0
     st.session_state.selected_players_info  = []
-    st.session_state.available_teams        = unique_teams.copy()
-    st.session_state.current_team           = random.choice(unique_teams) if unique_teams else None
-    if st.session_state.current_team in st.session_state.available_teams:
-        st.session_state.available_teams.remove(st.session_state.current_team)
-
-# Convenient local aliases
-df           = st.session_state.df
-unique_teams = st.session_state.unique_teams
-season_name  = st.session_state.season_name
+    st.session_state.used_seasons           = {season_name} if season_name else set()
+    st.session_state.current_season         = season_name
+    st.session_state.current_df             = df
+    st.session_state.current_team           = team
 
 
 # ─────────────────────────────────────────────
-# 5. SCREEN 1 — Welcome
+# 6. SCREEN 1 — Welcome
 # ─────────────────────────────────────────────
 if not st.session_state.game_started:
     st.title("🏀 EuroLeague Squad Draft Game")
     st.markdown("---")
-    st.subheader(f"📅 Season: **{season_name}**")
-    st.write("")
     st.subheader("Can you build an elite roster?")
     st.write("• You will draft a team over **5 rounds**.")
-    st.write("• Each round reveals a completely random EuroLeague squad.")
+    st.write("• Each round reveals a random team from a **random EuroLeague season**.")
     st.write("• **Roster Requirement:** Exactly **2 Guards (G), 2 Forwards (F), and 1 Center (C)**.")
     st.write("")
 
@@ -200,16 +200,15 @@ if not st.session_state.game_started:
 
 
 # ─────────────────────────────────────────────
-# 6. SCREEN 2 — Game Over Report
+# 7. SCREEN 2 — Game Over Report
 # ─────────────────────────────────────────────
 elif st.session_state.round_num > 5:
     st.title("🏆 Final Squad Report")
-    st.caption(f"📅 Season: {season_name}")
     st.markdown("---")
 
     for p in st.session_state.selected_players_info:
         pos_display = f" [{p['pos']}]" if p['pos'] else ""
-        st.markdown(f"**• {p['name']}**{pos_display} ({p['team']})")
+        st.markdown(f"**• {p['name']}**{pos_display} ({p['team']}) — *{p['season']}*")
         st.caption(f"➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB | {p['ast']:.1f} AST | {p['stl']:.1f} STL | {p['blk']:.1f} BLK")
         st.divider()
 
@@ -217,19 +216,18 @@ elif st.session_state.round_num > 5:
     st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total Stats: {st.session_state.grand_total_stats:.1f})")
     st.info(f"📢 STATUS: {message}")
 
-    if st.button("🔄 Play Again (new random season)", use_container_width=True):
-        # Wipe the whole session so a new season is picked on next run
+    if st.button("🔄 Play Again", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
 
 
 # ─────────────────────────────────────────────
-# 7. SCREEN 3 — Active Game Rounds
+# 8. SCREEN 3 — Active Game Rounds
 # ─────────────────────────────────────────────
 else:
     st.title(f"Round {st.session_state.round_num} / 5")
-    st.caption(f"📅 Season: {season_name}")
+    st.caption(f"📅 Season: **{st.session_state.current_season}** | 🏀 Team: **{st.session_state.current_team}**")
 
     g_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'G')
     f_count = sum(1 for p in st.session_state.selected_players_info if p.get('pos_clean') == 'F')
@@ -245,22 +243,32 @@ else:
         with st.expander("🏀 View Current Roster Details", expanded=False):
             for p in st.session_state.selected_players_info:
                 pos_log = f" ({p['pos']})" if p['pos'] else ""
-                st.write(f"• **{p['name']}**{pos_log} [{p['team']}] ➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB")
+                st.write(f"• **{p['name']}**{pos_log} [{p['team']}] *{p['season']}* ➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB")
 
     st.markdown("---")
-    st.subheader(f"🎲 Random Team: :blue[{st.session_state.current_team}]")
+    st.subheader(f"🎲 :blue[{st.session_state.current_team}]")
     st.write("Tap an available player's name to draft them:")
 
-    team_mask      = df['Team'].apply(lambda x: plays_for_team(x, st.session_state.current_team))
-    current_roster = df[team_mask]
+    current_df     = st.session_state.current_df
+    team_mask      = current_df['Team'].apply(lambda x: plays_for_team(x, st.session_state.current_team))
+    current_roster = current_df[team_mask]
     players        = current_roster['Player'].unique()
 
+    def draw_next_round():
+        """Pick a new random season+team and store in session state."""
+        season_name, df, team = pick_random_season_and_team(
+            exclude_seasons=st.session_state.used_seasons
+        )
+        if season_name:
+            st.session_state.used_seasons.add(season_name)
+            st.session_state.current_season = season_name
+            st.session_state.current_df     = df
+            st.session_state.current_team   = team
+
     if len(players) == 0:
-        st.warning(f"⚠️ No players found matching the team **{st.session_state.current_team}**.")
-        if st.button("Skip Team & Draw Another"):
-            if st.session_state.available_teams:
-                st.session_state.current_team = random.choice(st.session_state.available_teams)
-                st.session_state.available_teams.remove(st.session_state.current_team)
+        st.warning(f"⚠️ No players found for **{st.session_state.current_team}**.")
+        if st.button("Skip & Draw Another"):
+            draw_next_round()
             st.rerun()
     else:
         has_valid_move      = False
@@ -278,42 +286,34 @@ else:
             eligible_positions = parse_position(raw_pos)
 
             if not eligible_positions:
-                # Unknown position — show a single disabled button
                 player_buttons_data.append({
                     'name': name, 'label': f"{name} (?) 🚫 [Unknown pos]",
                     'disabled': True, 'row': p_row, 'pos_clean': "", 'pos_upper': "?"
                 })
                 continue
 
-            # One button per position the player CAN fill
             for pos_clean in eligible_positions:
                 filled, limit = roster_slots[pos_clean]
-                slot_full    = filled >= limit
-                slot_label   = {"G": "G Full", "F": "F Full", "C": "C Full"}[pos_clean]
-
-                # Display the original multi-position tag (e.g. "F/C") on every button
-                pos_display = "/".join(eligible_positions) if len(eligible_positions) > 1 else pos_clean
+                slot_full     = filled >= limit
+                slot_label    = {"G": "G Full", "F": "F Full", "C": "C Full"}[pos_clean]
+                pos_display   = "/".join(eligible_positions) if len(eligible_positions) > 1 else pos_clean
 
                 if slot_full:
-                    suffix       = f" 🚫 [{slot_label}]"
-                    is_disabled  = True
+                    suffix, is_disabled = f" 🚫 [{slot_label}]", True
                 else:
-                    suffix       = f" → draft as {pos_clean}"
-                    is_disabled  = False
+                    suffix, is_disabled = f" → draft as {pos_clean}", False
                     has_valid_move = True
 
-                button_label = f"{name} ({pos_display}){suffix}"
                 player_buttons_data.append({
-                    'name': name, 'label': button_label, 'disabled': is_disabled,
-                    'row': p_row, 'pos_clean': pos_clean, 'pos_upper': pos_display
+                    'name': name, 'label': f"{name} ({pos_display}){suffix}",
+                    'disabled': is_disabled, 'row': p_row,
+                    'pos_clean': pos_clean, 'pos_upper': pos_display
                 })
 
         if not has_valid_move:
-            st.error("⚠️ **Roster Constraint Lockout!** All players on this team fill positions you've already maxed out.")
+            st.error("⚠️ **Roster Constraint Lockout!** All players fill positions you've already maxed out.")
             if st.button("🔄 Draw a Different Team", use_container_width=True, type="primary"):
-                if st.session_state.available_teams:
-                    st.session_state.current_team = random.choice(st.session_state.available_teams)
-                    st.session_state.available_teams.remove(st.session_state.current_team)
+                draw_next_round()
                 st.rerun()
         else:
             cols = st.columns(2)
@@ -332,13 +332,13 @@ else:
                     st.session_state.selected_players_info.append({
                         'name':      pdata['name'],
                         'team':      st.session_state.current_team,
+                        'season':    st.session_state.current_season,
                         'pos':       pdata['pos_upper'],
                         'pos_clean': pdata['pos_clean'],
                         'pts': pts, 'trb': trb, 'ast': ast, 'stl': stl, 'blk': blk
                     })
 
                     st.session_state.round_num += 1
-                    if st.session_state.available_teams and st.session_state.round_num <= 5:
-                        st.session_state.current_team = random.choice(st.session_state.available_teams)
-                        st.session_state.available_teams.remove(st.session_state.current_team)
+                    if st.session_state.round_num <= 5:
+                        draw_next_round()
                     st.rerun()
