@@ -61,8 +61,6 @@ def load_season(gid: str):
     df.columns = df.columns.str.strip()
     rename_dict = {}
 
-    # For position: prefer exact 'Positions' column, then fall back to others.
-    # This avoids mapping two columns to the same name if both exist.
     position_priority = ['positions', 'position', 'pos', 'pos.', 'role', 'player-position']
     chosen_pos_col = None
     for priority in position_priority:
@@ -70,7 +68,6 @@ def load_season(gid: str):
         if match:
             chosen_pos_col = match
             break
-    # Final fallback: any column containing 'position'
     if not chosen_pos_col:
         chosen_pos_col = next((col for col in df.columns if 'position' in col.lower()), None)
 
@@ -116,23 +113,17 @@ def parse_position(raw_pos: str) -> list[str]:
     """
     Handles both old and new position formats and returns a list of
     normalised position codes (G, F, C) that the player can fill.
-
-    Old format: "G", "F/C", "PG/SG"
-    New format: "Scottie Wilbekin - G", "Nikola Mirotic - F/C", "Shane Larkin - PG/SG"
     """
     if not raw_pos or raw_pos.strip().upper() in ("", "NAN", "NONE"):
         return []
 
-    # Strip everything up to and including " - " if present (new format)
     if " - " in raw_pos:
         raw_pos = raw_pos.split(" - ", 1)[1]
 
-    # Now raw_pos is something like "G", "F/C", "PG/SG", "SF/PF"
     parts = [p.strip().upper() for p in raw_pos.split("/")]
 
     clean = set()
     for p in parts:
-        # Normalize sub-positions to base G/F/C
         if p in ("G", "PG", "SG"):
             clean.add("G")
         elif p in ("F", "SF", "PF"):
@@ -150,15 +141,18 @@ def parse_position(raw_pos: str) -> list[str]:
 # ─────────────────────────────────────────────
 # 4. Helper: pick a fresh random season + team
 # ─────────────────────────────────────────────
-def pick_random_season_and_team(exclude_seasons=None):
+def pick_random_season_and_team(pool_seasons, exclude_seasons=None):
     """
-    Picks a random season (not in exclude_seasons) and a random team from it.
-    Returns (season_name, df, team_name) or raises if nothing loads.
+    Picks a random season from the allowed pool_seasons (not in exclude_seasons) 
+    and a random team from it. Loops back if pool is fully exhausted.
     """
-    exclude_seasons = exclude_seasons or set()
-    available = [s for s in SEASONS if s not in exclude_seasons]
+    exclude_seasons = exclude_seasons if exclude_seasons is not None else set()
+    available = [s for s in pool_seasons if s not in exclude_seasons]
+    
+    # If all selected seasons have been visited, reset tracking to allow repetition
     if not available:
-        available = list(SEASONS.keys())  # reset if all used
+        exclude_seasons.clear()
+        available = list(pool_seasons)
 
     random.shuffle(available)
     for season_name in available:
@@ -181,19 +175,19 @@ def pick_random_season_and_team(exclude_seasons=None):
 # 5. Bootstrap: initialise session state
 # ─────────────────────────────────────────────
 if 'game_started' not in st.session_state:
-    season_name, df, team = pick_random_season_and_team()
     st.session_state.game_started           = False
     st.session_state.round_num              = 1
     st.session_state.grand_total_stats      = 0.0
     st.session_state.selected_players_info  = []
-    st.session_state.used_seasons           = {season_name} if season_name else set()
-    st.session_state.current_season         = season_name
-    st.session_state.current_df             = df
-    st.session_state.current_team           = team
+    st.session_state.used_seasons           = set()
+    st.session_state.pool_seasons           = list(SEASONS.keys())
+    st.session_state.current_season         = None
+    st.session_state.current_df             = None
+    st.session_state.current_team           = None
 
 
 # ─────────────────────────────────────────────
-# 6. SCREEN 1 — Welcome
+# 6. SCREEN 1 — Welcome & Settings
 # ─────────────────────────────────────────────
 if not st.session_state.game_started:
     st.title("🏀 EuroLeague Squad Draft Game")
@@ -203,10 +197,34 @@ if not st.session_state.game_started:
     st.write("• Each round reveals a random team from a **random EuroLeague season**.")
     st.write("• **Roster Requirement:** Exactly **2 Guards (G), 2 Forwards (F), and 1 Center (C)**.")
     st.write("")
+    
+    st.markdown("### 📅 Step 1: Configure Draft Pool")
+    chosen_seasons = st.multiselect(
+        "Select seasons to include in the random pool (Leave all selected to use every historical year):",
+        options=list(SEASONS.keys()),
+        default=list(SEASONS.keys()),
+        placeholder="Choose one or multiple seasons..."
+    )
 
     if st.button("🚀 Start Game", use_container_width=True, type="primary"):
-        st.session_state.game_started = True
-        st.rerun()
+        if not chosen_seasons:
+            st.error("⚠️ You must choose at least one season to populate your draft pool!")
+        else:
+            st.session_state.pool_seasons = chosen_seasons
+            # Roll first round details right away using the designated selection parameters
+            season_name, df, team = pick_random_season_and_team(
+                pool_seasons=st.session_state.pool_seasons,
+                exclude_seasons=st.session_state.used_seasons
+            )
+            if season_name:
+                st.session_state.used_seasons.add(season_name)
+                st.session_state.current_season = season_name
+                st.session_state.current_df     = df
+                st.session_state.current_team   = team
+                st.session_state.game_started   = True
+                st.rerun()
+            else:
+                st.error("⚠️ Encountered issues reading connection channels. Double-check your chosen seasons.")
 
 
 # ─────────────────────────────────────────────
@@ -264,8 +282,9 @@ else:
     players        = current_roster['Player'].unique()
 
     def draw_next_round():
-        """Pick a new random season+team and store in session state."""
+        """Pick a new random season+team from pool_seasons and store in session state."""
         season_name, df, team = pick_random_season_and_team(
+            pool_seasons=st.session_state.pool_seasons,
             exclude_seasons=st.session_state.used_seasons
         )
         if season_name:
@@ -285,7 +304,6 @@ else:
 
         roster_slots = {"G": (g_count, 2), "F": (f_count, 2), "C": (c_count, 1)}
 
-        # 1. Gather unique player profiles and their eligibility configurations
         for name in players:
             p_row = current_roster[current_roster['Player'] == name].iloc[0]
             raw_pos = (
@@ -318,7 +336,6 @@ else:
                 'name': name, 'row': p_row, 'positions': pos_info, 'pos_upper': pos_display
             })
 
-        # 2. Render UI Layout
         if not has_valid_move:
             st.error("⚠️ **Roster Constraint Lockout!** All players fill positions you've already maxed out.")
             if st.button("🔄 Draw a Different Team", use_container_width=True, type="primary"):
@@ -329,20 +346,16 @@ else:
             for i, pdata in enumerate(player_data):
                 col = cols[i % 2]
                 with col:
-                    # Renders a neat box framing the player's info card
                     with st.container(border=True):
                         if not pdata['positions']:
                             st.write(f"🚫 **{pdata['name']}** [Unknown pos]")
                         else:
-                            # Allocates 75% space for the name string, splits the rest for buttons
                             num_pos = len(pdata['positions'])
                             subcols = st.columns([3] + [1] * num_pos)
                             
-                            # Vertically offsets name to balance perfectly with default button layout heights
                             with subcols[0]:
                                 st.markdown(f"<div style='margin-top: 8px; font-weight: bold;'>{pdata['name']}</div>", unsafe_allow_html=True)
                             
-                            # Builds position option actions horizontally next to name string
                             for j, pos_dict in enumerate(pdata['positions']):
                                 with subcols[j+1]:
                                     if st.button(
