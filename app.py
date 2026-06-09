@@ -285,9 +285,9 @@ else:
 
     st.markdown("### 📋 Your Roster Requirements")
     c1, c2, c3 = st.columns(3)
-    c1.metric("🏀 Guards",   f"{g_count} / {st.session_state.max_g}")
-    c2.metric("💪 Forwards", f"{f_count} / {st.session_state.max_f}")
-    c3.metric("🪑 Centers",  f"{c_count} / {st.session_state.max_c}")
+    c1.metric("Guards",   f"{g_count} / {st.session_state.max_g}")
+    c2.metric("Forwards", f"{f_count} / {st.session_state.max_f}")
+    c3.metric("Centers",  f"{c_count} / {st.session_state.max_c}")
 
     if st.session_state.selected_players_info:
         with st.expander("🏀 View Current Roster Details", expanded=False):
