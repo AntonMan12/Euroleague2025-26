@@ -9,7 +9,6 @@ SPREADSHEET_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
 # ─────────────────────────────────────────────
 # 1. Fetch all sheet names + gids from the public spreadsheet
 # ─────────────────────────────────────────────
-# All 25 EuroLeague seasons — hardcoded for reliability
 SEASONS = {
     "2025-26": "543714600",
     "2024-25": "1549437101",
@@ -37,6 +36,14 @@ SEASONS = {
     "2002-03": "691080699",
     "2001-02": "1203521641",
     "2000-01": "1987314852",
+}
+
+ROSTER_OPTIONS = {
+    "2 Guards - 2 Forwards - 1 Center": {"G": 2, "F": 2, "C": 1},
+    "2 Guards - 1 Forward - 2 Centers": {"G": 2, "F": 1, "C": 2},
+    "3 Guards - 1 Forward - 1 Center":  {"G": 3, "F": 1, "C": 1},
+    "1 Guard - 3 Forwards - 1 Center":  {"G": 1, "F": 3, "C": 1},
+    "1 Guard - 2 Forwards - 2 Centers": {"G": 1, "F": 2, "C": 2},
 }
 
 def get_all_seasons():
@@ -183,6 +190,11 @@ if 'game_started' not in st.session_state:
     st.session_state.current_season         = None
     st.session_state.current_df             = None
     st.session_state.current_team           = None
+    
+    # Target counts for tracking requirements dynamically
+    st.session_state.max_g                  = 2
+    st.session_state.max_f                  = 2
+    st.session_state.max_c                  = 1
 
 
 # ─────────────────────────────────────────────
@@ -193,22 +205,35 @@ if not st.session_state.game_started:
     st.markdown("---")
     st.subheader("Can you build an elite roster?")
     st.write("• You will draft a team over **5 rounds**.")
-    st.write("• Each round reveals a random team from a **random EuroLeague season**.")
-    st.write("• **Roster Requirement:** Exactly **2 Guards (G), 2 Forwards (F), and 1 Center (C)**.")
+    st.write("• Each round reveals a random team from a random EuroLeague season within your setup pool.")
+    st.write("• You must exactly hit your configured target roster constraints below.")
     st.write("")
     
     st.markdown("### 📅 Step 1: Configure Draft Pool")
     chosen_seasons = st.multiselect(
         "Select seasons to include in the random pool:",
         options=list(SEASONS.keys()),
-        default=[],  # Keeps the selection box empty initially
+        default=[],  
         placeholder="Choose one or multiple seasons..."
+    )
+
+    st.markdown("### 📋 Step 2: Choose Roster Requirement")
+    chosen_requirement = st.selectbox(
+        "Select required positions combination for your final roster:",
+        options=list(ROSTER_OPTIONS.keys()),
+        index=0
     )
 
     if st.button("🚀 Start Game", use_container_width=True, type="primary"):
         if not chosen_seasons:
             st.error("⚠️ You must choose at least one season to populate your draft pool!")
         else:
+            # Inject dynamic roster configurations into session state
+            limits = ROSTER_OPTIONS[chosen_requirement]
+            st.session_state.max_g = limits["G"]
+            st.session_state.max_f = limits["F"]
+            st.session_state.max_c = limits["C"]
+
             st.session_state.pool_seasons = chosen_seasons
             season_name, df, team = pick_random_season_and_team(
                 pool_seasons=st.session_state.pool_seasons,
@@ -260,9 +285,9 @@ else:
 
     st.markdown("### 📋 Your Roster Requirements")
     c1, c2, c3 = st.columns(3)
-    c1.metric("🏀 Guards",   f"{g_count} / 2")
-    c2.metric("💪 Forwards", f"{f_count} / 2")
-    c3.metric("🪑 Centers",  f"{c_count} / 1")
+    c1.metric("🏀 Guards",   f"{g_count} / {st.session_state.max_g}")
+    c2.metric("💪 Forwards", f"{f_count} / {st.session_state.max_f}")
+    c3.metric("🪑 Centers",  f"{c_count} / {st.session_state.max_c}")
 
     if st.session_state.selected_players_info:
         with st.expander("🏀 View Current Roster Details", expanded=False):
@@ -300,7 +325,12 @@ else:
         has_valid_move = False
         player_data = []
 
-        roster_slots = {"G": (g_count, 2), "F": (f_count, 2), "C": (c_count, 1)}
+        # Enforce the dynamic roster limits loaded during customization setup 
+        roster_slots = {
+            "G": (g_count, st.session_state.max_g), 
+            "F": (f_count, st.session_state.max_f), 
+            "C": (c_count, st.session_state.max_c)
+        }
 
         for name in players:
             p_row = current_roster[current_roster['Player'] == name].iloc[0]
