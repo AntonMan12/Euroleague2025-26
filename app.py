@@ -149,7 +149,6 @@ def pick_random_season_and_team(pool_seasons, exclude_seasons=None):
     exclude_seasons = exclude_seasons if exclude_seasons is not None else set()
     available = [s for s in pool_seasons if s not in exclude_seasons]
     
-    # If all selected seasons have been visited, reset tracking to allow repetition
     if not available:
         exclude_seasons.clear()
         available = list(pool_seasons)
@@ -200,9 +199,9 @@ if not st.session_state.game_started:
     
     st.markdown("### 📅 Step 1: Configure Draft Pool")
     chosen_seasons = st.multiselect(
-        "Select seasons to include in the random pool (Leave all selected to use every historical year):",
+        "Select seasons to include in the random pool:",
         options=list(SEASONS.keys()),
-        default=list(SEASONS.keys()),
+        default=[],  # Keeps the selection box empty initially
         placeholder="Choose one or multiple seasons..."
     )
 
@@ -211,7 +210,6 @@ if not st.session_state.game_started:
             st.error("⚠️ You must choose at least one season to populate your draft pool!")
         else:
             st.session_state.pool_seasons = chosen_seasons
-            # Roll first round details right away using the designated selection parameters
             season_name, df, team = pick_random_season_and_team(
                 pool_seasons=st.session_state.pool_seasons,
                 exclude_seasons=st.session_state.used_seasons
