@@ -14,37 +14,41 @@ SPREADSHEET_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
 @st.cache_data(ttl=3600)
 def get_all_seasons():
     """
-    Returns a dict of { season_name: gid } by scraping the public HTML export.
-    Works for any public Google Sheet without an API key.
+    Returns a dict of { season_name: gid } for every sheet tab.
+    Uses the Sheets API v4 metadata endpoint, which works for public
+    spreadsheets without requiring a login or API key.
     """
-    html_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit"
+    # ── Sheets API v4 (no key needed for public sheets) ───────────────────
     try:
-        r = requests.get(html_url, timeout=10)
-        r.raise_for_status()
-        # Sheet metadata is embedded in the HTML as JSON-like fragments
-        # Pattern: ["sheet_name",null,gid, ...]
-        # We look for the gid anchors in the HTML instead — more stable
-        # Google embeds sheet tabs as: data-name="2025-26" ... data-id="0"
-        names = re.findall(r'data-name="([^"]+)"', r.text)
-        gids  = re.findall(r'data-id="(\d+)"',    r.text)
-        if names and gids and len(names) == len(gids):
-            return {name: gid for name, gid in zip(names, gids)}
+        url = (
+            f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}"
+            f"?fields=sheets.properties"
+        )
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            sheets  = r.json().get("sheets", [])
+            seasons = {
+                s["properties"]["title"]: str(s["properties"]["sheetId"])
+                for s in sheets
+            }
+            if seasons:
+                return seasons
     except Exception:
         pass
 
-    # Fallback: try the sheets feed (works for publicly shared sheets)
+    # ── Fallback: probe known + sequential gids via CSV export ────────────
+    # We don't know tab names this way, so we label them by gid.
     try:
-        feed_url = f"https://spreadsheets.google.com/feeds/worksheets/{SPREADSHEET_ID}/public/full?alt=json"
-        r = requests.get(feed_url, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        entries = data.get("feed", {}).get("entry", [])
-        seasons = {}
-        for entry in entries:
-            title = entry["title"]["$t"]
-            link  = next(l["href"] for l in entry["link"] if "gid" in l.get("href", ""))
-            gid   = re.search(r"gid=(\d+)", link).group(1)
-            seasons[title] = gid
+        probe_gids = [380503435, 0] + list(range(1, 30))
+        seasons    = {}
+        for gid in probe_gids:
+            test_url = (
+                f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/"
+                f"export?format=csv&gid={gid}"
+            )
+            resp = requests.head(test_url, timeout=6, allow_redirects=True)
+            if resp.status_code == 200:
+                seasons[f"Season (gid={gid})"] = str(gid)
         if seasons:
             return seasons
     except Exception:
