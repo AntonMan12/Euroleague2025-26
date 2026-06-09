@@ -88,7 +88,7 @@ def load_season(gid: str):
         elif clow == 'ast':         rename_dict[col] = 'AST'
         elif clow == 'stl':         rename_dict[col] = 'STL'
         elif clow == 'blk':         rename_dict[col] = 'BLK'
-        elif clow == 'pir':         rename_dict[col] = 'PIR'  # Map the PIR column
+        elif clow == 'pir':         rename_dict[col] = 'PIR'
     df.rename(columns=rename_dict, inplace=True)
     return df
 
@@ -102,11 +102,12 @@ def plays_for_team(player_team_str, target_team):
     return target_team.lower() in teams
 
 def get_squad_grade(score):
-    if   score >= 90.0:  return "A", "🔥 ELITE / ALL-EUROLEAGUE SQUAD! You drafted high-PIR superstars."
-    elif score >= 75.0:  return "B", "💪 PLAYOFF CONTENDER! A highly competitive lineup of efficient starters."
-    elif score >= 55.0:  return "C", "⚖️ MID-TABLE TEAM. An average draft with a mix of production and role players."
-    elif score >= 35.0:  return "D", "📉 REBUILDING PHASE. Your squad has too many low-efficiency players."
-    else:                return "E", "🪑 GARBAGE TIME SQUAD. You drafted deep rotation players."
+    # Calibrated for total PIR across 5 players
+    if   score >= 85.0:  return "A", "🔥 ELITE / ALL-EUROLEAGUE SQUAD! You drafted high-efficiency superstars (Avg 17+ PIR)."
+    elif score >= 65.0:  return "B", "💪 PLAYOFF CONTENDER! A highly competitive lineup of quality starters (Avg 13+ PIR)."
+    elif score >= 45.0:  return "C", "⚖️ MID-TABLE TEAM. An average draft with solid, balanced contributors (Avg 9+ PIR)."
+    elif score >= 25.0:  return "D", "📉 REBUILDING PHASE. Your squad relies too much on low-impact or bench players (Avg 5+ PIR)."
+    else:                return "E", "🪑 GARBAGE TIME SQUAD. Deep rotation players with minimal efficiency metrics (Avg < 5 PIR)."
 
 def get_unique_teams(df):
     raw_teams = df['Team'].dropna().unique()
@@ -256,7 +257,6 @@ elif st.session_state.round_num > 5:
     st.title("🏆 Final Squad Report")
     st.markdown("---")
 
-    # Display traditional box score metrics here, not the PIR
     for p in st.session_state.selected_players_info:
         pos_display = f" [{p['pos']}]" if p['pos'] else ""
         st.markdown(f"**• {p['name']}**{pos_display} ({p['team']}) — *{p['season']}*")
@@ -264,7 +264,7 @@ elif st.session_state.round_num > 5:
         st.divider()
 
     grade, message = get_squad_grade(st.session_state.grand_total_stats)
-    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total SCORE Accumulated: {st.session_state.grand_total_stats:.1f})")
+    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
     st.info(f"📢 STATUS: {message}")
 
     if st.button("🔄 Play Again", use_container_width=True):
@@ -285,9 +285,9 @@ else:
 
     st.markdown("### 📋 Your Roster Requirements")
     c1, c2, c3 = st.columns(3)
-    c1.metric(" Guards",   f"{g_count} / {st.session_state.max_g}")
-    c2.metric(" Forwards", f"{f_count} / {st.session_state.max_f}")
-    c3.metric(" Centers",  f"{c_count} / {st.session_state.max_c}")
+    c1.metric("🏀 Guards",   f"{g_count} / {st.session_state.max_g}")
+    c2.metric("💪 Forwards", f"{f_count} / {st.session_state.max_f}")
+    c3.metric("🪑 Centers",  f"{c_count} / {st.session_state.max_c}")
 
     if st.session_state.selected_players_info:
         with st.expander("🏀 View Current Roster Details", expanded=False):
@@ -394,13 +394,10 @@ else:
                                         row = pdata['row']
                                         pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
                                         
-                                        # Safely extract PIR value from dataset row
                                         pir = float(row['PIR']) if pd.notna(row['PIR']) else 0.0
 
-                                        # Add PIR towards grading total score evaluation 
                                         st.session_state.grand_total_stats += pir
                                         
-                                        # Keep traditional stats stored to showcase on game-over report screen
                                         st.session_state.selected_players_info.append({
                                             'name':      pdata['name'],
                                             'team':      st.session_state.current_team,
