@@ -102,7 +102,6 @@ def plays_for_team(player_team_str, target_team):
     return target_team.lower() in teams
 
 def get_squad_grade(score):
-    # Calibrated for total PIR across 5 players
     if   score >= 85.0:  return "A", "🔥 ELITE / ALL-EUROLEAGUE SQUAD! You drafted high-efficiency superstars (Avg 17+ PIR)."
     elif score >= 65.0:  return "B", "💪 PLAYOFF CONTENDER! A highly competitive lineup of quality starters (Avg 13+ PIR)."
     elif score >= 45.0:  return "C", "⚖️ MID-TABLE TEAM. An average draft with solid, balanced contributors (Avg 9+ PIR)."
@@ -119,10 +118,6 @@ def get_unique_teams(df):
 
 
 def parse_position(raw_pos: str) -> list[str]:
-    """
-    Handles both old and new position formats and returns a list of
-    normalised position codes (G, F, C) that the player can fill.
-    """
     if not raw_pos or raw_pos.strip().upper() in ("", "NAN", "NONE"):
         return []
 
@@ -151,10 +146,6 @@ def parse_position(raw_pos: str) -> list[str]:
 # 4. Helper: pick a fresh random season + team
 # ─────────────────────────────────────────────
 def pick_random_season_and_team(pool_seasons, exclude_seasons=None):
-    """
-    Picks a random season from the allowed pool_seasons (not in exclude_seasons) 
-    and a random team from it. Loops back if pool is fully exhausted.
-    """
     exclude_seasons = exclude_seasons if exclude_seasons is not None else set()
     available = [s for s in pool_seasons if s not in exclude_seasons]
     
@@ -274,7 +265,7 @@ elif st.session_state.round_num > 5:
 
 
 # ─────────────────────────────────────────────
-# 8. SCREEN 3 — Active Game Rounds
+# 8. SCREEN 3 — Active Game Rounds (MODIFIED WITH TRADING CARDS)
 # ─────────────────────────────────────────────
 else:
     st.title(f"Round {st.session_state.round_num} / 5")
@@ -305,7 +296,6 @@ else:
     players        = current_roster['Player'].unique()
 
     def draw_next_round():
-        """Pick a new random season+team from pool_seasons and store in session state."""
         season_name, df, team = pick_random_season_and_team(
             pool_seasons=st.session_state.pool_seasons,
             exclude_seasons=st.session_state.used_seasons
@@ -373,41 +363,83 @@ else:
             for i, pdata in enumerate(player_data):
                 col = cols[i % 2]
                 with col:
-                    with st.container(border=True):
-                        if not pdata['positions']:
-                            st.write(f"🚫 **{pdata['name']}** [Unknown pos]")
-                        else:
-                            num_pos = len(pdata['positions'])
-                            subcols = st.columns([3] + [1] * num_pos)
-                            
-                            with subcols[0]:
-                                st.markdown(f"<div style='margin-top: 8px; font-weight: bold;'>{pdata['name']}</div>", unsafe_allow_html=True)
-                            
-                            for j, pos_dict in enumerate(pdata['positions']):
-                                with subcols[j+1]:
-                                    if st.button(
-                                        pos_dict['pos_clean'],
-                                        key=f"btn_{pdata['name']}_{pos_dict['pos_clean']}_{st.session_state.round_num}",
-                                        use_container_width=True,
-                                        disabled=pos_dict['disabled']
-                                    ):
-                                        row = pdata['row']
-                                        pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
-                                        
-                                        pir = float(row['PIR']) if pd.notna(row['PIR']) else 0.0
+                    if not pdata['positions']:
+                        st.markdown(
+                            f"""
+                            <div style="background: #2d3748; border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 6px solid #cbd5e0;">
+                                <span style="color: #cbd5e0; font-weight: bold;">🚫 {pdata['name']}</span> <span style="color: #a0aec0; font-size: 0.8rem;">[Unknown Position]</span>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        row = pdata['row']
+                        
+                        # Fallback parsing metrics safely for layout display
+                        pir_val = f"{float(row['PIR']):.1f}" if pd.notna(row['PIR']) else "0.0"
+                        pts_val = f"{float(row['PTS']):.1f}" if pd.notna(row['PTS']) else "0.0"
+                        trb_val = f"{float(row['TRB']):.1f}" if pd.notna(row['TRB']) else "0.0"
+                        ast_val = f"{float(row['AST']):.1f}" if pd.notna(row['AST']) else "0.0"
 
-                                        st.session_state.grand_total_stats += pir
-                                        
-                                        st.session_state.selected_players_info.append({
-                                            'name':      pdata['name'],
-                                            'team':      st.session_state.current_team,
-                                            'season':    st.session_state.current_season,
-                                            'pos':       pdata['pos_upper'],
-                                            'pos_clean': pos_dict['pos_clean'],
-                                            'pts': pts, 'trb': trb, 'ast': ast, 'stl': stl, 'blk': blk
-                                        })
+                        # 1. Visual CSS Trading Card Layout Injection
+                        st.markdown(
+                            f"""
+                            <div style="
+                                background: linear-gradient(135deg, #1e2230 0%, #11141e 100%);
+                                border-radius: 12px;
+                                padding: 16px;
+                                border-left: 6px solid #FF5500;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                                margin-bottom: 8px;
+                            ">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="color: #FF5500; font-size: 0.8rem; font-weight: bold; letter-spacing: 0.5px;">
+                                        {pdata['pos_upper']}
+                                    </span>
+                                    <span style="background: rgba(255, 85, 0, 0.15); color: #FF7733; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">
+                                        PIR {pir_val}
+                                    </span>
+                                </div>
+                                <div style="color: white; font-size: 1.2rem; font-weight: bold; margin-bottom: 10px;">
+                                    {pdata['name']}
+                                </div>
+                                <div style="color: #8f9cae; font-size: 0.8rem; display: flex; gap: 14px;">
+                                    <span>🔥 <b>{pts_val}</b> PTS</span>
+                                    <span>🛡️ <b>{trb_val}</b> TRB</span>
+                                    <span>🪄 <b>{ast_val}</b> AST</span>
+                                </div>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                        
+                        # 2. Functional Action Row directly beneath the stylized container
+                        num_pos = len(pdata['positions'])
+                        btn_cols = st.columns(num_pos)
+                        
+                        for j, pos_dict in enumerate(pdata['positions']):
+                            with btn_cols[j]:
+                                if st.button(
+                                    f"Draft as {pos_dict['pos_clean']}",
+                                    key=f"btn_{pdata['name']}_{pos_dict['pos_clean']}_{st.session_state.round_num}",
+                                    use_container_width=True,
+                                    disabled=pos_dict['disabled']
+                                ):
+                                    pts, trb, ast, stl, blk = row['PTS'], row['TRB'], row['AST'], row['STL'], row['BLK']
+                                    pir = float(row['PIR']) if pd.notna(row['PIR']) else 0.0
 
-                                        st.session_state.round_num += 1
-                                        if st.session_state.round_num <= 5:
-                                            draw_next_round()
-                                        st.rerun()
+                                    st.session_state.grand_total_stats += pir
+                                    
+                                    st.session_state.selected_players_info.append({
+                                        'name':      pdata['name'],
+                                        'team':      st.session_state.current_team,
+                                        'season':    st.session_state.current_season,
+                                        'pos':       pdata['pos_upper'],
+                                        'pos_clean': pos_dict['pos_clean'],
+                                        'pts': pts, 'trb': trb, 'ast': ast, 'stl': stl, 'blk': blk
+                                    })
+
+                                    st.session_state.round_num += 1
+                                    if st.session_state.round_num <= 5:
+                                        draw_next_round()
+                                    st.rerun()
