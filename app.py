@@ -142,6 +142,17 @@ def parse_position(raw_pos: str) -> list[str]:
     return [pos for pos in ["G", "F", "C"] if pos in clean]
 
 
+# Helper to compute tactical board positioning offsets smoothly
+def get_court_coords(count, y_level):
+    if count == 1:
+        return [(y_level, 50)]
+    elif count == 2:
+        return [(y_level, 30), (y_level, 70)]
+    elif count == 3:
+        return [(y_level + 4, 22), (y_level, 50), (y_level + 4, 78)]
+    return [(y_level, int(100 * (i + 1) / (count + 1))) for i in range(count)]
+
+
 # ─────────────────────────────────────────────
 # 4. Helper: pick a fresh random season + team
 # ─────────────────────────────────────────────
@@ -242,17 +253,75 @@ if not st.session_state.game_started:
 
 
 # ─────────────────────────────────────────────
-# 7. SCREEN 2 — Game Over Report
+# 7. SCREEN 2 — Game Over Report (WITH BASKETBALL HALF-COURT)
 # ─────────────────────────────────────────────
 elif st.session_state.round_num > 5:
     st.title("🏆 Final Squad Report")
     st.markdown("---")
 
-    for p in st.session_state.selected_players_info:
-        pos_display = f" [{p['pos']}]" if p['pos'] else ""
-        st.markdown(f"**• {p['name']}**{pos_display} ({p['team']}) — *{p['season']}*")
-        st.caption(f"➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB | {p['ast']:.1f} AST | {p['stl']:.1f} STL | {p['blk']:.1f} BLK")
-        st.divider()
+    # 1. Sort roster into specific position bins for court placement
+    guards   = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'G']
+    forwards = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'F']
+    centers  = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'C']
+
+    g_positions = get_court_coords(len(guards), 74)
+    f_positions = get_court_coords(len(forwards), 46)
+    c_positions = get_court_coords(len(centers), 18)
+
+    # 2. Build HTML chips to sit over court coordinates
+    player_chips_html = ""
+    
+    for idx, p in enumerate(guards):
+        top, left = g_positions[idx]
+        player_chips_html += f"""
+        <div style="position: absolute; top: {top}%; left: {left}%; transform: translate(-50%, -50%); background: rgba(17, 20, 30, 0.9); border: 2px solid #FF5500; box-shadow: 0 4px 10px rgba(255,85,0,0.3); padding: 4px 12px; border-radius: 20px; color: white; text-align: center; white-space: nowrap; font-family: sans-serif; z-index: 10;">
+            <div style="font-size: 0.6rem; font-weight: 900; color: #FF5500;">GUARD</div>
+            <div style="font-size: 0.85rem; font-weight: bold;">{p['name']}</div>
+        </div>
+        """
+    for idx, p in enumerate(forwards):
+        top, left = f_positions[idx]
+        player_chips_html += f"""
+        <div style="position: absolute; top: {top}%; left: {left}%; transform: translate(-50%, -50%); background: rgba(17, 20, 30, 0.9); border: 2px solid #3388FF; box-shadow: 0 4px 10px rgba(51,136,255,0.3); padding: 4px 12px; border-radius: 20px; color: white; text-align: center; white-space: nowrap; font-family: sans-serif; z-index: 10;">
+            <div style="font-size: 0.6rem; font-weight: 900; color: #3388FF;">FORWARD</div>
+            <div style="font-size: 0.85rem; font-weight: bold;">{p['name']}</div>
+        </div>
+        """
+    for idx, p in enumerate(centers):
+        top, left = c_positions[idx]
+        player_chips_html += f"""
+        <div style="position: absolute; top: {top}%; left: {left}%; transform: translate(-50%, -50%); background: rgba(17, 20, 30, 0.9); border: 2px solid #00CC66; box-shadow: 0 4px 10px rgba(0,204,102,0.3); padding: 4px 12px; border-radius: 20px; color: white; text-align: center; white-space: nowrap; font-family: sans-serif; z-index: 10;">
+            <div style="font-size: 0.6rem; font-weight: 900; color: #00CC66;">CENTER</div>
+            <div style="font-size: 0.85rem; font-weight: bold;">{p['name']}</div>
+        </div>
+        """
+
+    # 3. Render the whole canvas (Crisp inline SVG + Overlay chips)
+    st.markdown("### 📋 Lineup Tactical Board")
+    st.markdown(
+        f"""
+        <div style="position: relative; width: 100%; max-width: 580px; margin: 0 auto 25px auto;">
+            <svg viewBox="0 0 500 450" style="width:100%; border-radius:14px; background:#11141e; border: 2px solid #2d3748; display: block;">
+                <rect x="170" y="0" width="160" height="170" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+                <path d="M 170,170 A 80,80 0 0,0 330,170" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+                <path d="M 40,0 L 40,20 A 210,210 0 0,0 460,20 L 460,0" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2.5" stroke-dasharray="4 2"/>
+                <path d="M 210,450 A 40,40 0 0,1 290,450" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+                <line x1="220" y1="25" x2="280" y2="25" stroke="rgba(255,255,255,0.4)" stroke-width="3"/>
+                <circle cx="250" cy="33" r="8" fill="none" stroke="#ff5500" stroke-width="2"/>
+            </svg>
+            {player_chips_html}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # 4. Standard list display underneath tactical map
+    with st.expander("📊 View Detailed Scouting Logs", expanded=True):
+        for p in st.session_state.selected_players_info:
+            pos_display = f" [{p['pos']}]" if p['pos'] else ""
+            st.markdown(f"**• {p['name']}**{pos_display} ({p['team']}) — *{p['season']}*")
+            st.caption(f"➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB | {p['ast']:.1f} AST | {p['stl']:.1f} STL | {p['blk']:.1f} BLK")
+            st.divider()
 
     grade, message = get_squad_grade(st.session_state.grand_total_stats)
     st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
@@ -375,7 +444,6 @@ else:
                     else:
                         row = pdata['row']
                         
-                        # Vivid HTML card injected cleanly without any performance stats displayed
                         st.markdown(
                             f"""
                             <div style="
@@ -397,7 +465,6 @@ else:
                             unsafe_allow_html=True
                         )
                         
-                        # Action row directly beneath the static styled card text
                         num_pos = len(pdata['positions'])
                         btn_cols = st.columns(num_pos)
                         
