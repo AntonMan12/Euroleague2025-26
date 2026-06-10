@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#FF5500"         # EuroLeague Neon Orange
+backgroundColor = "#0F111A"      # Deep Midnight Blue/Black
+secondaryBackgroundColor = "#1E2230" # Sleek Dark Grey for Cards
+textColor = "#FFFFFF"            # Crisp White Text
+font = "sans serif" 
