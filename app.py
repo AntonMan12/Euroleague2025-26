@@ -265,7 +265,7 @@ elif st.session_state.round_num > 5:
 
 
 # ─────────────────────────────────────────────
-# 8. SCREEN 3 — Active Game Rounds (MODIFIED WITH TRADING CARDS)
+# 8. SCREEN 3 — Active Game Rounds (STATS REMOVED FROM VIEW)
 # ─────────────────────────────────────────────
 else:
     st.title(f"Round {st.session_state.round_num} / 5")
@@ -284,7 +284,7 @@ else:
         with st.expander("🏀 View Current Roster Details", expanded=False):
             for p in st.session_state.selected_players_info:
                 pos_log = f" ({p['pos']})" if p['pos'] else ""
-                st.write(f"• **{p['name']}**{pos_log} [{p['team']}] *{p['season']}* ➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB")
+                st.write(f"• **{p['name']}**{pos_log} [{p['team']}] *{p['season']}*")
 
     st.markdown("---")
     st.subheader(f"🎲 :blue[{st.session_state.current_team}] — *{st.session_state.current_season}*")
@@ -375,13 +375,7 @@ else:
                     else:
                         row = pdata['row']
                         
-                        # Fallback parsing metrics safely for layout display
-                        pir_val = f"{float(row['PIR']):.1f}" if pd.notna(row['PIR']) else "0.0"
-                        pts_val = f"{float(row['PTS']):.1f}" if pd.notna(row['PTS']) else "0.0"
-                        trb_val = f"{float(row['TRB']):.1f}" if pd.notna(row['TRB']) else "0.0"
-                        ast_val = f"{float(row['AST']):.1f}" if pd.notna(row['AST']) else "0.0"
-
-                        # 1. Visual CSS Trading Card Layout Injection
+                        # Vivid HTML card injected cleanly without any performance stats displayed
                         st.markdown(
                             f"""
                             <div style="
@@ -392,28 +386,18 @@ else:
                                 box-shadow: 0 4px 12px rgba(0,0,0,0.4);
                                 margin-bottom: 8px;
                             ">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                    <span style="color: #FF5500; font-size: 0.8rem; font-weight: bold; letter-spacing: 0.5px;">
-                                        {pdata['pos_upper']}
-                                    </span>
-                                    <span style="background: rgba(255, 85, 0, 0.15); color: #FF7733; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">
-                                        PIR {pir_val}
-                                    </span>
+                                <div style="color: #FF5500; font-size: 0.8rem; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">
+                                    {pdata['pos_upper']}
                                 </div>
-                                <div style="color: white; font-size: 1.2rem; font-weight: bold; margin-bottom: 10px;">
+                                <div style="color: white; font-size: 1.2rem; font-weight: bold; margin-bottom: 4px;">
                                     {pdata['name']}
-                                </div>
-                                <div style="color: #8f9cae; font-size: 0.8rem; display: flex; gap: 14px;">
-                                    <span>🔥 <b>{pts_val}</b> PTS</span>
-                                    <span>🛡️ <b>{trb_val}</b> TRB</span>
-                                    <span>🪄 <b>{ast_val}</b> AST</span>
                                 </div>
                             </div>
                             """, 
                             unsafe_allow_html=True
                         )
                         
-                        # 2. Functional Action Row directly beneath the stylized container
+                        # Action row directly beneath the static styled card text
                         num_pos = len(pdata['positions'])
                         btn_cols = st.columns(num_pos)
                         
