@@ -4,7 +4,7 @@ import random
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
-SPREADSHEET_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
+SPREADSHEADS_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
 
 # ─────────────────────────────────────────────
 # 1. Fetch all sheet names + gids from the public spreadsheet
@@ -56,7 +56,7 @@ def get_all_seasons():
 @st.cache_data(ttl=3600)
 def load_season(gid: str):
     url = (
-        f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/"
+        f"https://docs.google.com/spreadsheets/d/{SPREADSHEADS_ID}/"
         f"export?format=csv&gid={gid}"
     )
     try:
@@ -102,11 +102,26 @@ def plays_for_team(player_team_str, target_team):
     return target_team.lower() in teams
 
 def get_squad_grade(score):
-    if   score >= 85.0:  return "A", "🔥 ELITE / ALL-EUROLEAGUE SQUAD! You drafted high-efficiency superstars (Avg 17+ PIR)."
-    elif score >= 65.0:  return "B", "💪 PLAYOFF CONTENDER! A highly competitive lineup of quality starters (Avg 13+ PIR)."
-    elif score >= 45.0:  return "C", "⚖️ MID-TABLE TEAM. An average draft with solid, balanced contributors (Avg 9+ PIR)."
-    elif score >= 25.0:  return "D", "📉 REBUILDING PHASE. Your squad relies too much on low-impact or bench players (Avg 5+ PIR)."
-    else:                return "E", "🪑 GARBAGE TIME SQUAD. Deep rotation players with minimal efficiency metrics (Avg < 5 PIR)."
+    if score >= 80.0:
+        return "LEGEND OF THE GAME", "🔥 Absolute basketball immortality. Your team is built of historical MVPs!"
+    elif score >= 70.0:
+        return "EUROLEAGUE CHAMPION", "🏆 Confetti is falling! You've reached the pinnacle of European basketball."
+    elif score >= 60.0:
+        return "EUROLEAGUE FINALIST", "🥈 So close to glory! A magnificent tournament run that fell just short in the final."
+    elif score >= 50.0:
+        return "FINAL FOUR CONTENDER", "✈️ Ticket punched to the big weekend! Your squad is among Europe's elite."
+    elif score >= 40.0:
+        return "PLAYOFF CONTENDER", "🔒 Locked into a best-of-five series. Postseason intensity starts now."
+    elif score >= 35.0:
+        return "ACHIEVED PLAY-IN", "🎟️ Alive to fight another day! You sneaked into the do-or-die elimination spot."
+    elif score >= 30.0:
+        return "BETTER LUCK NEXT YEAR", "🏖️ Regular season over. Time to head to the beach and re-evaluate the roster."
+    elif score >= 20.0:
+        return "YOU ARE NOT EVEN COMPETING", "📉 A completely forgettable season. The front office has a lot of answering to do."
+    elif score >= 10.0:
+        return "DOMESTIC 2ND DIVISION BOUND", "🚨 Relegation performance. This squad belongs in the lower leagues."
+    else:
+        return "MAYBE FOOTBALL IS YOUR SPORT", "⚽ Step away from the hardwood. Go try kicking a ball instead."
 
 def get_unique_teams(df):
     raw_teams = df['Team'].dropna().unique()
@@ -324,7 +339,7 @@ elif st.session_state.round_num > 5:
             st.divider()
 
     grade, message = get_squad_grade(st.session_state.grand_total_stats)
-    st.success(f"🏅 YOUR SQUAD GRADE: **[ GRADE {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
+    st.success(f"🏅 YOUR SQUAD RANK: **[ {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
     st.info(f"📢 STATUS: {message}")
 
     if st.button("🔄 Play Again", use_container_width=True):
@@ -403,7 +418,7 @@ else:
                 player_data.append({
                     'name': name, 'row': p_row, 'positions': [], 'pos_upper': "?"
                 })
-                continue
+                return_val = continue
 
             pos_info = []
             for pos_clean in eligible_positions:
