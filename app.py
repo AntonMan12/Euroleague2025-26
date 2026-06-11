@@ -174,14 +174,8 @@ def load_leaderboard():
                 return json.load(f)
         except Exception:
             pass
-    # Baseline benchmark scores to make the board look realistic out of the box
-    return [
-        {"Name": "Vassilis Spanoulis", "Score": 92.4},
-        {"Name": "Dimitris Diamantidis", "Score": 89.1},
-        {"Name": "Dejan Bodiroga", "Score": 87.5},
-        {"Name": "Sarunas Jasikevicius", "Score": 84.0},
-        {"Name": "Juan Carlos Navarro", "Score": 81.3},
-    ]
+    # Returns a completely clean list if no database file exists yet
+    return []
 
 def save_score_to_leaderboard(name, score):
     scores = load_leaderboard()
@@ -366,20 +360,24 @@ elif st.session_state.round_num > 5:
     # Display stylized Top 10 Table
     st.markdown("### 📊 Global Top 10 Leaderboard")
     top_10 = all_scores[:10]
-    leaderboard_markdown = "| Rank | Manager / Coach | Total PIR |\n| :--- | :--- | :--- |\n"
-    for idx, entry in enumerate(top_10, start=1):
-        medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"#{idx}"
-        
-        if st.session_state.score_submitted and entry["Name"] == st.session_state.submitted_name and entry["Score"] == current_rounded_score:
-            row_name = f"**{entry['Name']} (You)** 🌟"
-            row_score = f"**{entry['Score']:.1f}**"
-        else:
-            row_name = entry['Name']
-            row_score = f"{entry['Score']:.1f}"
+    
+    if not top_10:
+        st.write(" *The leaderboard is currently empty. Be the first to save a score!*")
+    else:
+        leaderboard_markdown = "| Rank | Manager / Coach | Total PIR |\n| :--- | :--- | :--- |\n"
+        for idx, entry in enumerate(top_10, start=1):
+            medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"#{idx}"
             
-        leaderboard_markdown += f"| {medal} | {row_name} | {row_score} |\n"
-        
-    st.markdown(leaderboard_markdown)
+            if st.session_state.score_submitted and entry["Name"] == st.session_state.submitted_name and entry["Score"] == current_rounded_score:
+                row_name = f"**{entry['Name']} (You)** 🌟"
+                row_score = f"**{entry['Score']:.1f}**"
+            else:
+                row_name = entry['Name']
+                row_score = f"{entry['Score']:.1f}"
+                
+            leaderboard_markdown += f"| {medal} | {row_name} | {row_score} |\n"
+            
+        st.markdown(leaderboard_markdown)
     st.markdown("---")
 
     # Tactical board representation setup
