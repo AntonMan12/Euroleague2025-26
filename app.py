@@ -6,6 +6,24 @@ import os
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
+# 2. Added this invisible scroll reset component
+components.html(
+    """
+    <script>
+        try {
+            window.parent.document.querySelector('.main').scrollTo({
+                top: 0, 
+                behavior: 'auto'
+            });
+        } catch (e) {
+            console.error("Scroll to top failed:", e);
+        }
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
 SPREADSHEADS_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
 LEADERBOARD_FILE = "leaderboard.json"
 
