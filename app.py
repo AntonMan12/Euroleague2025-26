@@ -20,7 +20,7 @@ components.html(
             if (marker) {{
                 marker.scrollIntoView({{ block: 'start', behavior: 'auto' }});
             }}
-        }}, 100);
+        }}, 10);
     </script>
     """,
     height=1
