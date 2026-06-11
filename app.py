@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 import random
+import json
+import os
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
 SPREADSHEADS_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
+LEADERBOARD_FILE = "leaderboard.json"
 
 # ─────────────────────────────────────────────
 # 1. Fetch all sheet names + gids from the public spreadsheet
@@ -94,7 +97,7 @@ def load_season(gid: str):
 
 
 # ─────────────────────────────────────────────
-# 3. Helpers
+# 3. Helpers & Leaderboard Storage Logic
 # ─────────────────────────────────────────────
 def plays_for_team(player_team_str, target_team):
     if pd.isna(player_team_str): return False
@@ -131,7 +134,6 @@ def get_unique_teams(df):
             individual_teams.add(t.strip())
     return list(individual_teams)
 
-
 def parse_position(raw_pos: str) -> list[str]:
     if not raw_pos or raw_pos.strip().upper() in ("", "NAN", "NONE"):
         return []
@@ -156,8 +158,6 @@ def parse_position(raw_pos: str) -> list[str]:
 
     return [pos for pos in ["G", "F", "C"] if pos in clean]
 
-
-# Helper to compute tactical board positioning offsets smoothly
 def get_court_coords(count, y_level):
     if count == 1:
         return [(y_level, 50)]
@@ -166,6 +166,33 @@ def get_court_coords(count, y_level):
     elif count == 3:
         return [(y_level + 4, 22), (y_level, 50), (y_level + 4, 78)]
     return [(y_level, int(100 * (i + 1) / (count + 1))) for i in range(count)]
+
+def load_leaderboard():
+    if os.path.exists(LEADERBOARD_FILE):
+        try:
+            with open(LEADERBOARD_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # Baseline benchmark scores to make the board look realistic out of the box
+    return [
+        {"Name": "Vassilis Spanoulis", "Score": 92.4},
+        {"Name": "Dimitris Diamantidis", "Score": 89.1},
+        {"Name": "Dejan Bodiroga", "Score": 87.5},
+        {"Name": "Sarunas Jasikevicius", "Score": 84.0},
+        {"Name": "Juan Carlos Navarro", "Score": 81.3},
+    ]
+
+def save_score_to_leaderboard(name, score):
+    scores = load_leaderboard()
+    scores.append({"Name": name, "Score": round(score, 1)})
+    scores = sorted(scores, key=lambda x: x["Score"], reverse=True)
+    try:
+        with open(LEADERBOARD_FILE, "w") as f:
+            json.dump(scores, f)
+    except Exception:
+        pass
+    return scores
 
 
 # ─────────────────────────────────────────────
@@ -213,6 +240,10 @@ if 'game_started' not in st.session_state:
     st.session_state.max_g                  = 2
     st.session_state.max_f                  = 2
     st.session_state.max_c                  = 1
+    
+    # Leaderboard state tracking flags
+    st.session_state.score_submitted        = False
+    st.session_state.submitted_name         = None
 
 
 # ─────────────────────────────────────────────
@@ -268,7 +299,7 @@ if not st.session_state.game_started:
 
 
 # ─────────────────────────────────────────────
-# 7. SCREEN 2 — Game Over Report
+# 7. SCREEN 2 — Game Over Report & Ranking System
 # ─────────────────────────────────────────────
 elif st.session_state.round_num > 5:
     grade, message = get_squad_grade(st.session_state.grand_total_stats)
@@ -284,7 +315,7 @@ elif st.session_state.round_num > 5:
             border: 2px solid #ff5500;
             border-radius: 16px;
             box-shadow: 0 8px 24px rgba(255,85,0,0.15);
-            margin: 20px 0 30px 0;
+            margin: 20px 0 25px 0;
         ">
             <div style="font-size: 0.85rem; font-weight: 800; color: #a0aec0; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;">
                 FINAL SQUAD RANK
@@ -303,8 +334,55 @@ elif st.session_state.round_num > 5:
         unsafe_allow_html=True
     )
     
+    # ── GLOBAL LEADERBOARD BLOCK ──
+    st.markdown("---")
+    all_scores = load_leaderboard()
+    current_rounded_score = round(st.session_state.grand_total_stats, 1)
+
+    if st.session_state.score_submitted:
+        player_rank = 1
+        for rank, entry in enumerate(all_scores, start=1):
+            if entry["Name"] == st.session_state.submitted_name and entry["Score"] == current_rounded_score:
+                player_rank = rank
+                break
+        st.success(f"🎉 **Roster Saved!** Your squad placed at **#{player_rank}** out of {len(all_scores)} unique attempts.")
+    else:
+        projected_rank = sum(1 for x in all_scores if x["Score"] > current_rounded_score) + 1
+        st.markdown("### 🏅 Save Your Position")
+        st.info(f"Your score of **{current_rounded_score:.1f} PIR** puts you at **#{projected_rank}** position on the leaderboard.")
+        
+        with st.form("leaderboard_form", clear_on_submit=True):
+            player_name = st.text_input("Enter your coach name / tag to register score:", max_chars=20, placeholder="Coach Maljković")
+            submit_btn = st.form_submit_button("💾 Commit to Leaderboard", use_container_width=True)
+            if submit_btn:
+                if not player_name.strip():
+                    st.warning("Coach name field cannot remain blank.")
+                else:
+                    all_scores = save_score_to_leaderboard(player_name.strip(), st.session_state.grand_total_stats)
+                    st.session_state.score_submitted = True
+                    st.session_state.submitted_name = player_name.strip()
+                    st.rerun()
+
+    # Display stylized Top 10 Table
+    st.markdown("### 📊 Global Top 10 Leaderboard")
+    top_10 = all_scores[:10]
+    leaderboard_markdown = "| Rank | Manager / Coach | Total PIR |\n| :--- | :--- | :--- |\n"
+    for idx, entry in enumerate(top_10, start=1):
+        medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"#{idx}"
+        
+        if st.session_state.score_submitted and entry["Name"] == st.session_state.submitted_name and entry["Score"] == current_rounded_score:
+            row_name = f"**{entry['Name']} (You)** 🌟"
+            row_score = f"**{entry['Score']:.1f}**"
+        else:
+            row_name = entry['Name']
+            row_score = f"{entry['Score']:.1f}"
+            
+        leaderboard_markdown += f"| {medal} | {row_name} | {row_score} |\n"
+        
+    st.markdown(leaderboard_markdown)
     st.markdown("---")
 
+    # Tactical board representation setup
     guards   = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'G']
     forwards = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'F']
     centers  = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'C']
@@ -314,7 +392,6 @@ elif st.session_state.round_num > 5:
     c_positions = get_court_coords(len(centers), 18)
 
     player_chips_html = ""
-    
     for idx, p in enumerate(guards):
         top, left = g_positions[idx]
         player_chips_html += f"""
@@ -402,7 +479,7 @@ else:
     current_roster = current_df[team_mask]
     players        = current_roster['Player'].unique()
 
-    # 🔒 ANTI-DUPLICATE RULE: Filter out any player already present in the user's current roster
+    # ANTI-DUPLICATE RULE: Filter out any player already present in the user's current roster
     already_drafted = {p['name'] for p in st.session_state.selected_players_info}
     players = [p for p in players if p not in already_drafted]
 
