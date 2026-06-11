@@ -7,24 +7,6 @@ import os
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
-# 1. Generate a dynamic state slug to track screen changes
-state_slug = f"{st.session_state.get('round_num', 1)}_{st.session_state.get('game_started', False)}_{len(st.session_state.get('selected_players_info', []))}_{st.session_state.get('score_submitted', False)}"
-
-# 2. Pure browser-level scroll engine (No 'key' argument to avoid Python 3.14 crashes)
-components.html(
-    f"""
-    <div id="iframe-top-marker" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px;"></div>
-    <script>
-        setTimeout(() => {{
-            const marker = document.getElementById('iframe-top-marker');
-            if (marker) {{
-                marker.scrollIntoView({{ block: 'start', behavior: 'auto' }});
-            }}
-        }}, 10);
-    </script>
-    """,
-    height=1
-)
 
 SPREADSHEADS_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
 LEADERBOARD_FILE = "leaderboard.json"
