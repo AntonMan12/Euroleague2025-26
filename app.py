@@ -7,23 +7,20 @@ import os
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
-# 1. Create an anchor point at the very top of the page layout
-st.markdown("<div id='top-of-page'></div>", unsafe_allow_html=True)
-
-# 2. Track a dynamic state slug to know when the screen has changed
+# 1. Generate a dynamic state slug to track screen changes
 state_slug = f"{st.session_state.get('round_num', 1)}_{st.session_state.get('game_started', False)}_{len(st.session_state.get('selected_players_info', []))}_{st.session_state.get('score_submitted', False)}"
 
-# 3. Safe scroll execution (No 'key' or 'width/height=0' arguments to avoid telemetry crashes)
+# 2. Pure browser-level scroll engine (No 'key' argument to avoid Python 3.14 crashes)
 components.html(
     f"""
-    <a id="scroll-link" href="#top-of-page" target="_parent" style="display:none;">Go to Top</a>
+    <div id="iframe-top-marker" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px;"></div>
     <script>
         setTimeout(() => {{
-            const link = document.getElementById('scroll-link');
-            if (link) {{
-                link.click();
+            const marker = document.getElementById('iframe-top-marker');
+            if (marker) {{
+                marker.scrollIntoView({{ block: 'start', behavior: 'auto' }});
             }}
-        }}, 50);
+        }}, 30);
     </script>
     """,
     height=1
