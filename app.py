@@ -7,22 +7,28 @@ import os
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
-# 2. Added this invisible scroll reset component
+# 1. Create an anchor point at the very top of the page layout
+st.markdown("<div id='top-of-page'></div>", unsafe_allow_html=True)
+
+# 2. Track a dynamic state slug so Streamlit recreates this component on every single screen update
+state_slug = f"{st.session_state.get('round_num', 1)}_{st.session_state.get('game_started', False)}_{len(st.session_state.get('selected_players_info', []))}_{st.session_state.get('score_submitted', False)}"
+
+# 3. Fire an automatic, cross-origin safe navigation click to snap the viewport back to the top anchor
 components.html(
-    """
+    f"""
+    <a id="scroll-link" href="#top-of-page" target="_parent" style="display:none;">Go to Top</a>
     <script>
-        try {
-            window.parent.document.querySelector('.main').scrollTo({
-                top: 0, 
-                behavior: 'auto'
-            });
-        } catch (e) {
-            console.error("Scroll to top failed:", e);
-        }
+        setTimeout(() => {{
+            const link = document.getElementById('scroll-link');
+            if (link) {{
+                link.click();
+            }}
+        }}, 50);
     </script>
     """,
     height=0,
     width=0,
+    key=f"scroll_engine_{state_slug}"
 )
 
 SPREADSHEADS_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
