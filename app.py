@@ -418,7 +418,7 @@ else:
                 player_data.append({
                     'name': name, 'row': p_row, 'positions': [], 'pos_upper': "?"
                 })
-                return_val = continue
+                continue
 
             pos_info = []
             for pos_clean in eligible_positions:
