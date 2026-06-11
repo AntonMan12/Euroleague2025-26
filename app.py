@@ -4,12 +4,15 @@ import pandas as pd
 import random
 import json
 import os
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="EuroLeague Squad Draft Game", page_icon="🏀", layout="centered")
 
-
 SPREADSHEADS_ID = "1xPjvZ0vnRN_arbIWIJemXRzH9U9Krb3jZCcCfifILAw"
-LEADERBOARD_FILE = "leaderboard.json"
+SPREADSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEADS_ID}/edit#gid=0"
+
+# Establish live Google Sheets connection
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # ─────────────────────────────────────────────
 # 1. Fetch all sheet names + gids from the public spreadsheet
@@ -99,7 +102,7 @@ def load_season(gid: str):
 
 
 # ─────────────────────────────────────────────
-# 3. Helpers & Leaderboard Storage Logic
+# 3. Helpers & Leaderboard Storage Logic (Google Sheets)
 # ─────────────────────────────────────────────
 def plays_for_team(player_team_str, target_team):
     if pd.isna(player_team_str): return False
@@ -170,25 +173,25 @@ def get_court_coords(count, y_level):
     return [(y_level, int(100 * (i + 1) / (count + 1))) for i in range(count)]
 
 def load_leaderboard():
-    if os.path.exists(LEADERBOARD_FILE):
-        try:
-            with open(LEADERBOARD_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    # Returns a completely clean list if no database file exists yet
-    return []
+    """Fetches the live leaderboard records from the dedicated 'Leaderboard' worksheet tab."""
+    try:
+        df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="Leaderboard", ttl=0)
+        df = df.dropna(subset=["Name"])
+        df["Score"] = pd.to_numeric(df["Score"])
+        return df.sort_values(by="Score", ascending=False).to_dict(orient="records")
+    except Exception:
+        return []
 
 def save_score_to_leaderboard(name, score):
+    """Appends a row and updates the Google Sheet live scoreboard."""
     scores = load_leaderboard()
-    scores.append({"Name": name, "Score": round(score, 1)})
-    scores = sorted(scores, key=lambda x: x["Score"], reverse=True)
-    try:
-        with open(LEADERBOARD_FILE, "w") as f:
-            json.dump(scores, f)
-    except Exception:
-        pass
-    return scores
+    scores.append({"Name": name.strip(), "Score": round(float(score), 1)})
+    
+    df_updated = pd.DataFrame(scores)
+    df_updated = df_updated.sort_values(by="Score", ascending=False)
+    
+    conn.update(spreadsheet=SPREADSHEET_URL, worksheet="Leaderboard", data=df_updated)
+    return df_updated.to_dict(orient="records")
 
 
 # ─────────────────────────────────────────────
@@ -614,34 +617,36 @@ else:
                                         draw_next_round()
                                     st.rerun()
 # ─────────────────────────────────────────────
-# 9. Hidden Admin Section (Temporary)
+# 9. Hidden Admin Section
 # ─────────────────────────────────────────────
 st.markdown("---")
 with st.expander("🛠️ Admin Tools"):
     admin_password = st.text_input("Enter Password to Access Actions", type="password")
     
-    # Replace "eurobasket" with whatever password you want
     if admin_password == "eurobasket":
-        st.subheader("Manage Leaderboard")
+        st.subheader("Manage Leaderboard (Google Sheets)")
         current_board = load_leaderboard()
         
         if not current_board:
             st.write("Leaderboard is already empty.")
         else:
-            # Dropdown of all names currently on the board
             names_list = list(set(entry["Name"] for entry in current_board))
             target_name = st.selectbox("Select a name to ban/remove:", options=names_list)
             
             if st.button("❌ Delete Selected Name", type="primary"):
-                # Filter out the banned name
                 updated_board = [x for x in current_board if x["Name"] != target_name]
-                with open(LEADERBOARD_FILE, "w") as f:
-                    json.dump(updated_board, f)
-                st.success(f"Successfully removed '{target_name}' from the database!")
+                df_updated = pd.DataFrame(updated_board)
+                
+                # Maintain headers if completely cleared out
+                if df_updated.empty:
+                    df_updated = pd.DataFrame(columns=["Name", "Score"])
+                    
+                conn.update(spreadsheet=SPREADSHEET_URL, worksheet="Leaderboard", data=df_updated)
+                st.success(f"Successfully removed '{target_name}' from the Google Sheet database!")
                 st.rerun()
                 
             if st.button("🚨 Nuke Entire Leaderboard"):
-                if os.path.exists(LEADERBOARD_FILE):
-                    os.remove(LEADERBOARD_FILE)
-                st.success("Leaderboard completely wiped!")
+                df_empty = pd.DataFrame(columns=["Name", "Score"])
+                conn.update(spreadsheet=SPREADSHEET_URL, worksheet="Leaderboard", data=df_empty)
+                st.success("Leaderboard completely wiped from Google Sheets!")
                 st.rerun()
