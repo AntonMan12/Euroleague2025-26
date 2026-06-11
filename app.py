@@ -611,3 +611,35 @@ else:
                                     if st.session_state.round_num <= 5:
                                         draw_next_round()
                                     st.rerun()
+# ─────────────────────────────────────────────
+# 9. Hidden Admin Section (Temporary)
+# ─────────────────────────────────────────────
+st.markdown("---")
+with st.expander("🛠️ Admin Tools"):
+    admin_password = st.text_input("Enter Password to Access Actions", type="password")
+    
+    # Replace "eurobasket" with whatever password you want
+    if admin_password == "eurobasket":
+        st.subheader("Manage Leaderboard")
+        current_board = load_leaderboard()
+        
+        if not current_board:
+            st.write("Leaderboard is already empty.")
+        else:
+            # Dropdown of all names currently on the board
+            names_list = list(set(entry["Name"] for entry in current_board))
+            target_name = st.selectbox("Select a name to ban/remove:", options=names_list)
+            
+            if st.button("❌ Delete Selected Name", type="primary"):
+                # Filter out the banned name
+                updated_board = [x for x in current_board if x["Name"] != target_name]
+                with open(LEADERBOARD_FILE, "w") as f:
+                    json.dump(updated_board, f)
+                st.success(f"Successfully removed '{target_name}' from the database!")
+                st.rerun()
+                
+            if st.button("🚨 Nuke Entire Leaderboard"):
+                if os.path.exists(LEADERBOARD_FILE):
+                    os.remove(LEADERBOARD_FILE)
+                st.success("Leaderboard completely wiped!")
+                st.rerun()
