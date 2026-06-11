@@ -268,13 +268,43 @@ if not st.session_state.game_started:
 
 
 # ─────────────────────────────────────────────
-# 7. SCREEN 2 — Game Over Report (WITH BASKETBALL HALF-COURT)
+# 7. SCREEN 2 — Game Over Report
 # ─────────────────────────────────────────────
 elif st.session_state.round_num > 5:
+    grade, message = get_squad_grade(st.session_state.grand_total_stats)
+
     st.title("🏆 Final Squad Report")
+    
+    st.markdown(
+        f"""
+        <div style="
+            text-align: center; 
+            padding: 24px; 
+            background: linear-gradient(135deg, #1e2230 0%, #0d0f14 100%);
+            border: 2px solid #ff5500;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(255,85,0,0.15);
+            margin: 20px 0 30px 0;
+        ">
+            <div style="font-size: 0.85rem; font-weight: 800; color: #a0aec0; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;">
+                FINAL SQUAD RANK
+            </div>
+            <div style="font-size: 3.2rem; font-weight: 900; color: #ff5500; line-height: 1.1; margin: 0; letter-spacing: -0.5px;">
+                {grade}
+            </div>
+            <div style="font-size: 1.15rem; color: #e2e8f0; margin-top: 12px; font-style: italic;">
+                {message}
+            </div>
+            <div style="display: inline-block; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 6px 18px; margin-top: 14px; font-weight: bold; color: #cbd5e0; font-size: 0.95rem;">
+                🏀 Total PIR Accumulated: <span style="color: white; font-weight: 800;">{st.session_state.grand_total_stats:.1f}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
     st.markdown("---")
 
-    # 1. Sort roster into specific position bins for court placement
     guards   = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'G']
     forwards = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'F']
     centers  = [p for p in st.session_state.selected_players_info if p.get('pos_clean') == 'C']
@@ -283,7 +313,6 @@ elif st.session_state.round_num > 5:
     f_positions = get_court_coords(len(forwards), 46)
     c_positions = get_court_coords(len(centers), 18)
 
-    # 2. Build HTML chips to sit over court coordinates
     player_chips_html = ""
     
     for idx, p in enumerate(guards):
@@ -311,7 +340,6 @@ elif st.session_state.round_num > 5:
         </div>
         """
 
-    # 3. Render the whole canvas (Crisp inline SVG + Overlay chips)
     st.markdown("### 📋 Lineup Tactical Board")
     st.markdown(
         f"""
@@ -330,17 +358,12 @@ elif st.session_state.round_num > 5:
         unsafe_allow_html=True
     )
 
-    # 4. Standard list display underneath tactical map
     with st.expander("📊 View Detailed Scouting Logs", expanded=True):
         for p in st.session_state.selected_players_info:
             pos_display = f" [{p['pos']}]" if p['pos'] else ""
             st.markdown(f"**• {p['name']}**{pos_display} ({p['team']}) — *{p['season']}*")
             st.caption(f"➔ {p['pts']:.1f} PTS | {p['trb']:.1f} TRB | {p['ast']:.1f} AST | {p['stl']:.1f} STL | {p['blk']:.1f} BLK")
             st.divider()
-
-    grade, message = get_squad_grade(st.session_state.grand_total_stats)
-    st.success(f"🏅 YOUR SQUAD RANK: **[ {grade} ]** (Total PIR Accumulated: {st.session_state.grand_total_stats:.1f})")
-    st.info(f"📢 STATUS: {message}")
 
     if st.button("🔄 Play Again", use_container_width=True):
         for key in list(st.session_state.keys()):
@@ -349,7 +372,7 @@ elif st.session_state.round_num > 5:
 
 
 # ─────────────────────────────────────────────
-# 8. SCREEN 3 — Active Game Rounds (STATS REMOVED FROM VIEW)
+# 8. SCREEN 3 — Active Game Rounds
 # ─────────────────────────────────────────────
 else:
     st.title(f"Round {st.session_state.round_num} / 5")
@@ -379,6 +402,10 @@ else:
     current_roster = current_df[team_mask]
     players        = current_roster['Player'].unique()
 
+    # 🔒 ANTI-DUPLICATE RULE: Filter out any player already present in the user's current roster
+    already_drafted = {p['name'] for p in st.session_state.selected_players_info}
+    players = [p for p in players if p not in already_drafted]
+
     def draw_next_round():
         season_name, df, team = pick_random_season_and_team(
             pool_seasons=st.session_state.pool_seasons,
@@ -391,7 +418,7 @@ else:
             st.session_state.current_team   = team
 
     if len(players) == 0:
-        st.warning(f"⚠️ No players found for **{st.session_state.current_team}**.")
+        st.warning(f"⚠️ No remaining undrafted players found for **{st.session_state.current_team}**.")
         if st.button("Skip & Draw Another"):
             draw_next_round()
             st.rerun()
@@ -438,7 +465,7 @@ else:
             })
 
         if not has_valid_move:
-            st.error("⚠️ **Roster Constraint Lockout!** All players fill positions you've already maxed out.")
+            st.error("⚠️ **Roster Constraint Lockout!** All available options fill positions you've already maxed out.")
             if st.button("🔄 Draw a Different Team", use_container_width=True, type="primary"):
                 draw_next_round()
                 st.rerun()
