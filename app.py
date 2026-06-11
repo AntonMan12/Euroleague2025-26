@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import random
 import json
@@ -166,27 +167,47 @@ def get_court_coords(count, y_level):
     elif count == 3:
         return [(y_level + 4, 22), (y_level, 50), (y_level + 4, 78)]
     return [(y_level, int(100 * (i + 1) / (count + 1))) for i in range(count)]
+# Connect to your public spreadsheet
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_leaderboard():
-    if os.path.exists(LEADERBOARD_FILE):
-        try:
-            with open(LEADERBOARD_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    # Returns a completely clean list if no database file exists yet
-    return []
+    try:
+        # Pull live data specifically from the Leaderboard tab
+        df = conn.read(
+            spreadsheet=st.secrets["spreadsheet_url"], 
+            worksheet="Leaderboard",
+            ttl=0
+        )
+        df = df.dropna(subset=["Name", "Score"])
+        df = df.sort_values(by="Score", ascending=False)
+        return df.to_dict(orient="records")
+    except Exception:
+        return []
 
 def save_score_to_leaderboard(name, score):
-    scores = load_leaderboard()
-    scores.append({"Name": name, "Score": round(score, 1)})
-    scores = sorted(scores, key=lambda x: x["Score"], reverse=True)
     try:
-        with open(LEADERBOARD_FILE, "w") as f:
-            json.dump(scores, f)
+        df = conn.read(
+            spreadsheet=st.secrets["spreadsheet_url"], 
+            worksheet="Leaderboard",
+            ttl=0
+        )
+        df = df.dropna(subset=["Name", "Score"])
     except Exception:
-        pass
-    return scores
+        df = pd.DataFrame(columns=["Name", "Score"])
+    
+    # Append the new coach score
+    new_row = pd.DataFrame([{"Name": name, "Score": round(score, 1)}])
+    updated_df = pd.concat([df, new_row], ignore_index=True)
+    
+    # Push back to the Leaderboard tab
+    conn.update(
+        spreadsheet=st.secrets["spreadsheet_url"], 
+        worksheet="Leaderboard",
+        data=updated_df
+    )
+    
+    return updated_df.sort_values(by="Score", ascending=False).to_dict(orient="records")
+
 
 
 # ─────────────────────────────────────────────
