@@ -176,8 +176,11 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_leaderboard():
     try:
-        # No spreadsheet URL needed here anymore; it pulls from secrets!
-        df = conn.read(worksheet="Leaderboard", ttl=0)
+        # Streamlit automatically finds the spreadsheet from your secrets block!
+        df = conn.read(
+            worksheet="Leaderboard",
+            ttl=0
+        )
         df = df.dropna(subset=["Name", "Score"])
         df = df.sort_values(by="Score", ascending=False)
         return df.to_dict(orient="records")
@@ -186,16 +189,25 @@ def load_leaderboard():
 
 def save_score_to_leaderboard(name, score):
     try:
-        df = conn.read(worksheet="Leaderboard", ttl=0)
+        # Streamlit automatically finds the spreadsheet from your secrets block!
+        df = conn.read(
+            worksheet="Leaderboard",
+            ttl=0
+        )
         df = df.dropna(subset=["Name", "Score"])
     except Exception:
         df = pd.DataFrame(columns=["Name", "Score"])
     
+    # Append the new coach score
     new_row = pd.DataFrame([{"Name": name, "Score": round(score, 1)}])
     updated_df = pd.concat([df, new_row], ignore_index=True)
     
-    # Save live to the Cloud-authenticated worksheet
-    conn.update(worksheet="Leaderboard", data=updated_df)
+    # Push back to the Leaderboard tab automatically
+    conn.update(
+        worksheet="Leaderboard",
+        data=updated_df
+    )
+    
     return updated_df.sort_values(by="Score", ascending=False).to_dict(orient="records")
 
 def save_score_to_leaderboard(name, score):
