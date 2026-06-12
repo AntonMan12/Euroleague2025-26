@@ -167,22 +167,36 @@ def get_court_coords(count, y_level):
     elif count == 3:
         return [(y_level + 4, 22), (y_level, 50), (y_level + 4, 78)]
     return [(y_level, int(100 * (i + 1) / (count + 1))) for i in range(count)]
-# Connect to your public spreadsheet
+import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
+
+# Streamlit automatically logs in using the credentials under [connections.gsheets]
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_leaderboard():
     try:
-        # Pull live data specifically from the Leaderboard tab
-        df = conn.read(
-            spreadsheet=st.secrets["spreadsheet_url"], 
-            worksheet="Leaderboard",
-            ttl=0
-        )
+        # No spreadsheet URL needed here anymore; it pulls from secrets!
+        df = conn.read(worksheet="Leaderboard", ttl=0)
         df = df.dropna(subset=["Name", "Score"])
         df = df.sort_values(by="Score", ascending=False)
         return df.to_dict(orient="records")
     except Exception:
         return []
+
+def save_score_to_leaderboard(name, score):
+    try:
+        df = conn.read(worksheet="Leaderboard", ttl=0)
+        df = df.dropna(subset=["Name", "Score"])
+    except Exception:
+        df = pd.DataFrame(columns=["Name", "Score"])
+    
+    new_row = pd.DataFrame([{"Name": name, "Score": round(score, 1)}])
+    updated_df = pd.concat([df, new_row], ignore_index=True)
+    
+    # Save live to the Cloud-authenticated worksheet
+    conn.update(worksheet="Leaderboard", data=updated_df)
+    return updated_df.sort_values(by="Score", ascending=False).to_dict(orient="records")
 
 def save_score_to_leaderboard(name, score):
     try:
