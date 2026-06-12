@@ -189,7 +189,7 @@ def load_leaderboard():
 
 def save_score_to_leaderboard(name, score):
     try:
-        # Streamlit automatically finds the spreadsheet from your secrets block!
+        # Streamlit handles the spreadsheet link entirely in the background now!
         df = conn.read(
             worksheet="Leaderboard",
             ttl=0
@@ -198,42 +198,16 @@ def save_score_to_leaderboard(name, score):
     except Exception:
         df = pd.DataFrame(columns=["Name", "Score"])
     
-    # Append the new coach score
     new_row = pd.DataFrame([{"Name": name, "Score": round(score, 1)}])
     updated_df = pd.concat([df, new_row], ignore_index=True)
     
-    # Push back to the Leaderboard tab automatically
+    # Just tell it which tab to update
     conn.update(
         worksheet="Leaderboard",
         data=updated_df
     )
     
     return updated_df.sort_values(by="Score", ascending=False).to_dict(orient="records")
-
-def save_score_to_leaderboard(name, score):
-    try:
-        df = conn.read(
-            spreadsheet=st.secrets["spreadsheet_url"], 
-            worksheet="Leaderboard",
-            ttl=0
-        )
-        df = df.dropna(subset=["Name", "Score"])
-    except Exception:
-        df = pd.DataFrame(columns=["Name", "Score"])
-    
-    # Append the new coach score
-    new_row = pd.DataFrame([{"Name": name, "Score": round(score, 1)}])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
-    
-    # Push back to the Leaderboard tab
-    conn.update(
-        spreadsheet=st.secrets["spreadsheet_url"], 
-        worksheet="Leaderboard",
-        data=updated_df
-    )
-    
-    return updated_df.sort_values(by="Score", ascending=False).to_dict(orient="records")
-
 
 
 # ─────────────────────────────────────────────
